@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 version: "3.9"
 
 services:
@@ -6,11 +7,21 @@ services:
     env_file: .env
     ports:
       - "8000:8000"
+=======
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+>>>>>>> 443cf3b4165506c1ab3de92f7a0272091d790bfd
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+<<<<<<< HEAD
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   worker:
@@ -33,6 +44,22 @@ services:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
+=======
+    volumes:
+      - ./app:/app/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: gorush
+      POSTGRES_PASSWORD: gorush
+      POSTGRES_DB: gorush
+    ports:
+      - "5432:5432"
+    volumes:
+      - gorush_pg_data:/var/lib/postgresql/data
+>>>>>>> 443cf3b4165506c1ab3de92f7a0272091d790bfd
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U gorush"]
       interval: 5s
@@ -49,6 +76,7 @@ services:
       timeout: 5s
       retries: 10
 
+<<<<<<< HEAD
   prometheus:
     image: prom/prometheus:latest
     volumes:
@@ -78,3 +106,7 @@ services:
 
 volumes:
   pg_data:
+=======
+volumes:
+  gorush_pg_data:
+>>>>>>> 443cf3b4165506c1ab3de92f7a0272091d790bfd
