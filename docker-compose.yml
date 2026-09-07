@@ -1,29 +1,17 @@
-<<<<<<< HEAD
-version: "3.9"
-
 services:
   api:
     build: .
     env_file: .env
     ports:
       - "8000:8000"
-=======
-services:
-  api:
-    build: .
-    ports:
-      - "8000:8000"
-    env_file:
-      - .env
->>>>>>> 443cf3b4165506c1ab3de92f7a0272091d790bfd
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-<<<<<<< HEAD
+    volumes:
+      - ./app:/app/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-
   worker:
     build: .
     env_file: .env
@@ -33,7 +21,6 @@ services:
       redis:
         condition: service_healthy
     command: python -m app.jobs.worker
-
   postgres:
     image: pgvector/pgvector:pg16
     environment:
@@ -44,28 +31,11 @@ services:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
-=======
-    volumes:
-      - ./app:/app/app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: gorush
-      POSTGRES_PASSWORD: gorush
-      POSTGRES_DB: gorush
-    ports:
-      - "5432:5432"
-    volumes:
-      - gorush_pg_data:/var/lib/postgresql/data
->>>>>>> 443cf3b4165506c1ab3de92f7a0272091d790bfd
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U gorush"]
       interval: 5s
       timeout: 5s
       retries: 10
-
   redis:
     image: redis:7-alpine
     ports:
@@ -75,15 +45,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-
-<<<<<<< HEAD
   prometheus:
     image: prom/prometheus:latest
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
       - "9090:9090"
-
   grafana:
     image: grafana/grafana:latest
     ports:
@@ -92,7 +59,6 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin
     depends_on:
       - prometheus
-
   pgadmin:
     image: dpage/pgadmin4:latest
     environment:
@@ -106,7 +72,3 @@ services:
 
 volumes:
   pg_data:
-=======
-volumes:
-  gorush_pg_data:
->>>>>>> 443cf3b4165506c1ab3de92f7a0272091d790bfd

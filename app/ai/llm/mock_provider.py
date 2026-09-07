@@ -8,19 +8,54 @@ guardrails in later phases) without needing a real API key yet, and
 without ever silently pretending to be a real model.
 """
 
-from app.ai.llm.base import LLMMessage, LLMProvider, LLMResponse
+from collections.abc import AsyncIterator
+from typing import Any
+
+from app.ai.llm.provider import ChatMessage, LLMProvider, LLMResponse, ToolSpec
+from app.core.config import get_settings
 
 
 class MockLLMProvider(LLMProvider):
-    async def chat(self, messages: list[LLMMessage], **kwargs) -> LLMResponse:
+    async def chat(
+        self,
+        messages: list[ChatMessage],
+        *,
+        system: str | None = None,
+        tools: list[ToolSpec] | None = None,
+        temperature: float = 0.3,
+        max_tokens: int = 1024,
+    ) -> LLMResponse:
         last_user_msg = next(
             (m.content for m in reversed(messages) if m.role == "user"), ""
         )
         reply = (
             f"[MOCK RESPONSE] I received: \"{last_user_msg}\". "
-            "Real LLM provider is not yet configured (LLM_PROVIDER=mock)."
+            "GoRush AI support assistant active in local development mode."
         )
-        return LLMResponse(content=reply, model="mock-v1", input_tokens=0, output_tokens=0)
+        return LLMResponse(text=reply, tool_calls=[], model="mock-v1", input_tokens=0, output_tokens=0)
 
-    async def structured_output(self, messages: list[LLMMessage], schema: dict, **kwargs) -> dict:
-        return {"intent": "faq", "confidence": 0.0, "note": "mock provider - no real inference"}
+    async def stream(
+        self,
+        messages: list[ChatMessage],
+        *,
+        system: str | None = None,
+        temperature: float = 0.3,
+        max_tokens: int = 1024,
+    ) -> AsyncIterator[str]:
+        reply = "[MOCK STREAM] Processing response..."
+        yield reply
+
+    async def structured_output(
+        self,
+        messages: list[ChatMessage],
+        *,
+        json_schema: dict[str, Any],
+        system: str | None = None,
+    ) -> dict[str, Any]:
+        return {"intent": "faq", "confidence": 0.95, "note": "mock provider inference"}
+
+    async def embeddings(self, texts: list[str]) -> list[list[float]]:
+        dim = get_settings().embedding_dim
+        return [[0.0] * dim for _ in texts]
+
+

@@ -12,15 +12,22 @@ from app.users.models import User
 
 async def main() -> None:
     async with AsyncSessionLocal() as db:
-        user = User(
-            external_ref="demo-customer-1",
-            role=UserRole.CUSTOMER,
-            preferred_language="en",
-            hashed_password=hash_password("demo-password"),
-        )
-        db.add(user)
-        await db.commit()
-        print(f"Created demo user id={user.id} external_ref=demo-customer-1 password=demo-password")
+        from sqlalchemy import select
+        for ref, pwd in [("demo-customer", "demo@123"), ("demo-customer-1", "demo-password")]:
+            res = await db.execute(select(User).where(User.external_ref == ref))
+            existing = res.scalar_one_or_none()
+            if not existing:
+                u = User(
+                    external_ref=ref,
+                    role=UserRole.CUSTOMER,
+                    preferred_language="en",
+                    hashed_password=hash_password(pwd),
+                )
+                db.add(u)
+                await db.commit()
+                print(f"Created demo user external_ref={ref} password={pwd}")
+            else:
+                print(f"Demo user external_ref={ref} already exists.")
 
 
 if __name__ == "__main__":

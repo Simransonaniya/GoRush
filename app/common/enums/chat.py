@@ -10,9 +10,25 @@ class UserRole(str, Enum):
 
 
 class Language(str, Enum):
+    # Full launch support
     ENGLISH = "en"
     HINDI = "hi"
     HINGLISH = "hi-en"
+    MIXED = "mixed"
+    
+    # Phase 2 regional languages (Feature Flagged)
+    MARATHI = "mr"
+    GUJARATI = "gu"
+    BENGALI = "bn"
+    TAMIL = "ta"
+    TELUGU = "te"
+    KANNADA = "kn"
+    MALAYALAM = "ml"
+    PUNJABI = "pa"
+    ODIA = "or"
+    ASSAMESE = "as"
+    URDU = "ur"
+    
     UNKNOWN = "unknown"
 
 

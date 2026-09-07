@@ -23,6 +23,13 @@ def test_intent_driver_cancelled():
     assert result.confidence > 0.5
 
 
+def test_intent_driver_come_late():
+    result = intent_detector.detect("when my driver come?")
+    assert result.intent == Intent.DRIVER_LATE
+    assert result.confidence > 0.5
+
+
+
 def test_safety_intent_overrides_everything():
     result = intent_detector.detect("There was an accident, I need help now")
     assert result.intent == Intent.SAFETY

@@ -6,10 +6,15 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 import uuid
 
+from app.core.config import get_settings
 from app.database.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 from app.database.session import Base
 
-EMBEDDING_DIM = 1536  # must match the embedding model in use
+# Must match app/knowledge/embeddings/provider.py's EMBEDDING_MODEL output
+# dimension (e.g. 384 for sentence-transformers/all-MiniLM-L6-v2). Changing
+# EMBEDDING_MODEL to a different-dimension model requires a migration that
+# alters this column and a full re-ingestion via reingest_all_active().
+EMBEDDING_DIM = get_settings().embedding_dim
 
 
 class KnowledgeArticle(Base, UUIDPrimaryKeyMixin, TimestampMixin):

@@ -1,6 +1,5 @@
 __pycache__/
 *.pyc
-<<<<<<< HEAD
 .env
 .venv/
 venv/
@@ -9,11 +8,5 @@ venv/
 .mypy_cache/
 dist/
 build/
-=======
-.venv/
-venv/
-.env
-*.egg-info/
-.pytest_cache/
-.mypy_cache/
->>>>>>> 443cf3b4165506c1ab3de92f7a0272091d790bfd
+*.db
+

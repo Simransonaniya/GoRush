@@ -14,9 +14,9 @@ SAFETY_KEYWORDS = re.compile(
 
 INTENT_KEYWORD_MAP: list[tuple[Intent, re.Pattern]] = [
     (Intent.DRIVER_CANCELLED, re.compile(r"driver.*(cancel|cancelled)|driver ne cancel", re.I)),
-    (Intent.DRIVER_LATE, re.compile(r"driver.*(late|not come|nahi aa raha|aayega)", re.I)),
+    (Intent.DRIVER_LATE, re.compile(r"driver.*(late|not come|nahi aa raha|aayega|come|arrive|kab aayega|delay)", re.I)),
     (Intent.NO_DRIVER, re.compile(r"no driver|driver nahi mil|koi driver nahi", re.I)),
-    (Intent.RIDE_STATUS, re.compile(r"where.*driver|ride status|kaha hai driver", re.I)),
+    (Intent.RIDE_STATUS, re.compile(r"(where|when).*(driver|ride)|ride status|kaha hai driver|eta", re.I)),
     (Intent.FARE, re.compile(r"fare|price|kitna paisa|charge", re.I)),
     (Intent.PAYMENT_FAILED, re.compile(r"payment fail|paise nahi kate|payment issue", re.I)),
     (Intent.REFUND, re.compile(r"refund|paisa wapas", re.I)),

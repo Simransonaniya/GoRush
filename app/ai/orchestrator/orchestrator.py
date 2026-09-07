@@ -21,6 +21,7 @@ from app.core.logging import get_logger
 from app.guardrails.input.pipeline import input_guardrail_pipeline
 from app.guardrails.output.pipeline import output_guardrail_pipeline
 from app.handoff.service import HandoffService
+from app.knowledge.embeddings.provider import get_embedding_provider
 from app.knowledge.retrieval.service import RAGRetrievalService
 from app.tools.registry.registry import ToolRegistry, default_tool_registry
 from app.tools.registry.tool_spec import ToolContext
@@ -101,11 +102,13 @@ class ChatOrchestrator:
         rag_context = ""
         if intent_result.intent in KNOWLEDGE_DRIVEN_INTENTS:
             try:
-                rag_service = RAGRetrievalService(self.db, self.llm_gateway.primary)
+                rag_service = RAGRetrievalService(self.db, get_embedding_provider())
                 chunks = await rag_service.retrieve(text, language=intent_result.language.value)
                 rag_context = rag_service.build_context_block(chunks)
-            except NotImplementedError:
-                # embeddings backend not configured in this environment; degrade gracefully
+            except ValueError:
+                # embeddings backend not configured (missing EMBEDDING_API_KEY);
+                # degrade gracefully rather than failing the whole turn
+                logger.warning("rag_embedding_provider_not_configured")
                 rag_context = ""
 
         # 14-19: tool-augmented LLM turn with authorization enforced by ToolRouter

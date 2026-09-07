@@ -1,29 +1,13 @@
 """
-<<<<<<< HEAD
 Centralized, typed application configuration.
 All values are read from environment variables (.env in local dev).
 Never hardcode secrets here.
 """
-=======
-Central application configuration.
-
-Why this exists:
-NestJS uses a ConfigModule that validates env vars at startup and injects
-a typed config object everywhere. We do the same thing here with
-pydantic-settings: it reads environment variables (or a .env file),
-validates their types, and gives us a single typed `settings` object
-to import anywhere in the app. If a required env var is missing or the
-wrong type, the app refuses to start -- which is exactly what we want
-for production safety.
-"""
-
->>>>>>> 443cf3b4165506c1ab3de92f7a0272091d790bfd
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-<<<<<<< HEAD
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # App
@@ -51,6 +35,12 @@ class Settings(BaseSettings):
     llm_timeout_seconds: int = 20
     llm_max_retries: int = 2
 
+    # Embeddings
+    embedding_provider: str = "huggingface"
+    embedding_api_key: str = ""
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_dim: int = 384
+
     # GoRush upstream
     gorush_ride_api_base_url: str = "https://mock.gorush.internal/ride"
     gorush_payment_api_base_url: str = "https://mock.gorush.internal/payment"
@@ -65,47 +55,8 @@ class Settings(BaseSettings):
     # Guardrails
     max_tool_calls_per_turn: int = 5
     max_orchestration_steps: int = 8
-=======
-    # --- App ---
-    APP_NAME: str = "GoRush AI Chatbot Backend"
-    ENV: str = "development"  # development | staging | production
-    API_V1_PREFIX: str = "/v1"
-    DEBUG: bool = True
-
-    # --- Security ---
-    JWT_SECRET: str = "change-me-in-env"
-    JWT_ALGORITHM: str = "HS256"
-    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
-
-    # --- Database (Postgres) ---
-    DATABASE_URL: str = (
-        "postgresql+asyncpg://gorush:gorush@localhost:5432/gorush"
-    )
-
-    # --- Redis ---
-    REDIS_URL: str = "redis://localhost:6379/0"
-
-    # --- LLM Gateway ---
-    LLM_PROVIDER: str = "mock"  # mock | anthropic | openai
-    LLM_MODEL: str = "claude-sonnet-4-6"
-    LLM_API_KEY: str = ""
-    LLM_TIMEOUT_SECONDS: int = 30
-
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
->>>>>>> 443cf3b4165506c1ab3de92f7a0272091d790bfd
 
 
 @lru_cache
 def get_settings() -> Settings:
-<<<<<<< HEAD
     return Settings()
-=======
-    """
-    Cached so we don't re-read/re-validate env vars on every import.
-    Equivalent to NestJS's singleton-scoped ConfigService.
-    """
-    return Settings()
-
-
-settings = get_settings()
->>>>>>> 443cf3b4165506c1ab3de92f7a0272091d790bfd
