@@ -36,7 +36,7 @@ class GoRushPaymentClient(ABC):
     async def get_refund_status(self, ride_id: str) -> dict[str, Any]: ...
 
     @abstractmethod
-    async def request_refund(self, ride_id: str, reason: str) -> dict[str, Any]: ...
+    async def request_refund(self, ride_id: str, reason: str, amount: float | None = None) -> dict[str, Any]: ...
 
 
 class GoRushSupportClient(ABC):
@@ -106,8 +106,13 @@ class MockGoRushPaymentClient(GoRushPaymentClient):
     async def get_refund_status(self, ride_id: str) -> dict[str, Any]:
         return {"ride_id": ride_id, "status": "not_requested"}
 
-    async def request_refund(self, ride_id: str, reason: str) -> dict[str, Any]:
-        return {"ride_id": ride_id, "status": "refund_initiated", "reason": reason}
+    async def request_refund(self, ride_id: str, reason: str, amount: float | None = None) -> dict[str, Any]:
+        return {
+            "ride_id": ride_id,
+            "status": "refund_initiated",
+            "reason": reason,
+            "amount": amount,
+        }
 
 
 class MockGoRushSupportClient(GoRushSupportClient):

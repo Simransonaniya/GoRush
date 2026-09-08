@@ -10,7 +10,7 @@ from app.ai.llm.gateway import LLMGateway
 from app.ai.llm.provider import ChatMessage, ToolSpec
 from app.ai.orchestrator.loop_guard import LoopGuard, OrchestrationLimitExceededError
 from app.ai.orchestrator.schema import HandoffInfo, OrchestrationResult
-from app.ai.prompts.registry import get_prompt
+from app.ai.prompts.registry import LANGUAGE_CODE_TO_NAME, get_prompt
 from app.audit.service import AuditService
 from app.common.enums.chat import Intent, MessageRole, Priority, UserRole
 from app.common.exceptions.base import ConfirmationRequiredError, ToolDeniedError
@@ -31,9 +31,22 @@ logger = get_logger(__name__)
 
 # Intents that should always be resolved with an approved knowledge article
 # rather than free-form LLM generation.
+# These map to KB article categories ingested via the knowledge ingestion pipeline.
+# Add an intent here only if approved articles for that category exist in the DB.
 KNOWLEDGE_DRIVEN_INTENTS = {
-    Intent.FAQ, Intent.CANCELLATION, Intent.REFUND, Intent.PROMO,
-    Intent.PRIVACY, Intent.ACCOUNT, Intent.WALLET,
+    Intent.FAQ,                  # category: "faq"
+    Intent.CANCELLATION,         # category: "cancellation" (policy & fees)
+    Intent.REFUND,               # category: "refund" (eligibility & timelines)
+    Intent.PROMO,                # category: "promo" (discount & coupon rules)
+    Intent.PRIVACY,              # category: "privacy" (data policy)
+    Intent.ACCOUNT,              # category: "account" (profile, login, deletion)
+    Intent.WALLET,               # category: "wallet" (balance, top-up, limits)
+    Intent.REFERRAL,             # category: "referral" (earn cashback, invite rules)
+    Intent.INCENTIVE,            # category: "incentive" (bonus targets & payout terms)
+    Intent.DOCUMENT_STATUS,      # category: "document_status" (expiry & verification guidelines)
+    Intent.VEHICLE_DOCUMENT,     # category: "vehicle_document" (vehicle change & RC rules)
+    Intent.NAVIGATION,           # category: "navigation" (GPS & mapping guidance)
+    Intent.APP_TROUBLESHOOTING,  # category: "app_troubleshooting" (app crashes & troubleshooting)
 }
 
 
@@ -103,7 +116,11 @@ class ChatOrchestrator:
         if intent_result.intent in KNOWLEDGE_DRIVEN_INTENTS:
             try:
                 rag_service = RAGRetrievalService(self.db, get_embedding_provider())
-                chunks = await rag_service.retrieve(text, language=intent_result.language.value)
+                chunks = await rag_service.retrieve(
+                    text,
+                    language=intent_result.language.value,
+                    category=intent_result.intent.value,  # scope search to matching KB category
+                )
                 rag_context = rag_service.build_context_block(chunks)
             except ValueError:
                 # embeddings backend not configured (missing EMBEDDING_API_KEY);
@@ -114,9 +131,28 @@ class ChatOrchestrator:
         # 14-19: tool-augmented LLM turn with authorization enforced by ToolRouter
         prompt = get_prompt("customer_support_system" if role == UserRole.CUSTOMER else "driver_support_system")
         llm_messages = await self.context.build_llm_messages(session_id)
+
+        # Language-lock reminder: injected immediately before the user turn so the
+        # LLM cannot be drifted to a prior session language by stale assistant messages
+        # in the conversation history (e.g. a previous turn was answered in Marathi but
+        # the current message is in Tamil).  Using role="user" keeps it compatible with
+        # providers that do not support a mid-history "system" role.
+        detected_language_name = LANGUAGE_CODE_TO_NAME.get(
+            intent_result.language.value, intent_result.language.value.upper()
+        )
+        llm_messages.append(
+            ChatMessage(
+                role="user",
+                content=(
+                    f"[SYSTEM REMINDER — ignore any prior language used in this conversation] "
+                    f"The user's current message is in {detected_language_name}. "
+                    f"You MUST reply ONLY in {detected_language_name}. Do NOT use any other language."
+                ),
+            )
+        )
         llm_messages.append(ChatMessage(role="user", content=text))
 
-        system_prompt = prompt.content
+        system_prompt = prompt.render(intent_result.language.value)
         if rag_context:
             system_prompt += f"\n\nApproved knowledge base context (use only this for policy facts):\n{rag_context}"
 
@@ -128,7 +164,7 @@ class ChatOrchestrator:
         actions_taken: list[str] = []
         handoff_info = HandoffInfo()
         final_text = ""
-        model_version = self.settings.llm_model_primary
+        llm_version = self.settings.llm_model_primary
 
         try:
             for _ in range(loop_guard.max_steps):
@@ -136,7 +172,8 @@ class ChatOrchestrator:
                 response = await self.llm_gateway.chat_with_fallback(
                     llm_messages, system=system_prompt, tools=tool_specs
                 )
-                model_version = response.model
+                model_version_str = response.model
+                llm_version = model_version_str
 
                 if not response.tool_calls:
                     final_text = response.text
@@ -192,7 +229,7 @@ class ChatOrchestrator:
         await self.conversations.add_message(
             session_id, MessageRole.ASSISTANT, final_text,
             language=intent_result.language.value, intent=intent_result.intent.value,
-            metadata={"actions": actions_taken, "model": model_version},
+            metadata={"actions": actions_taken, "model": llm_version},
         )
         await self.context.maybe_summarize(session_id)
 
@@ -202,7 +239,7 @@ class ChatOrchestrator:
             intent=intent_result.intent,
             actions=actions_taken,
             handoff=handoff_info,
-            model_version=model_version,
+            llm_version=llm_version,
             prompt_version=prompt.version,
         )
 
@@ -228,7 +265,7 @@ class ChatOrchestrator:
         return OrchestrationResult(
             message=reply, language=intent_result.language, intent=Intent.SAFETY,
             actions=["create_safety_incident"], handoff=handoff_info,
-            model_version="deterministic-safety-flow", prompt_version="safety_system_v1",
+            llm_version="deterministic-safety-flow", prompt_version="safety_system_v1",
         )
 
     async def _escalate(

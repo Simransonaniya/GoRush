@@ -16,6 +16,9 @@ from app.core.config import get_settings
 
 
 class MockLLMProvider(LLMProvider):
+    def __init__(self, model: str | None = None):
+        self.model = model or "mock-v1"
+
     async def chat(
         self,
         messages: list[ChatMessage],

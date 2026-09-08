@@ -1,4 +1,4 @@
-from app.ai.llm.anthropic_provider import AnthropicProvider
+from app.ai.llm.factory import build_llm_provider
 from app.ai.llm.provider import ChatMessage, LLMProvider, LLMResponse, ToolSpec
 from app.common.exceptions.base import UpstreamUnavailableError
 from app.core.config import get_settings
@@ -12,24 +12,15 @@ DETERMINISTIC_FALLBACK_TEXT = (
 )
 
 
-def _get_provider(provider_name: str, model_name: str) -> LLMProvider:
-    if provider_name.lower() in ("mock", "none"):
-        from app.ai.llm.mock_provider import MockLLMProvider
-        return MockLLMProvider()
-    from app.ai.llm.anthropic_provider import AnthropicProvider
-    return AnthropicProvider(model=model_name)
-
-
 class LLMGateway:
     """Wraps a primary + fallback LLMProvider and guarantees the caller
     always gets *something* usable back: primary model -> secondary model
-    -> deterministic fallback text. Callers decide whether a deterministic
-    fallback should also trigger human handoff."""
+    -> deterministic fallback text."""
 
     def __init__(self, primary: LLMProvider | None = None, fallback: LLMProvider | None = None):
         settings = get_settings()
-        self.primary = primary or _get_provider(settings.llm_provider, settings.llm_model_primary)
-        self.fallback = fallback or _get_provider(settings.llm_provider, settings.llm_model_fallback)
+        self.primary = primary or build_llm_provider(model=settings.llm_model_primary, settings=settings)
+        self.fallback = fallback or build_llm_provider(model=settings.llm_model_fallback, settings=settings)
 
     async def chat_with_fallback(
         self,
@@ -46,6 +37,7 @@ class LLMGateway:
             )
         except UpstreamUnavailableError:
             logger.warning("llm_primary_failed_falling_back")
+
         try:
             return await self.fallback.chat(
                 messages, system=system, tools=tools, temperature=temperature, max_tokens=max_tokens

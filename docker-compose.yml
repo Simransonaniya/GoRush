@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   api:
     build: .
@@ -9,9 +11,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ./app:/app/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
   worker:
     build: .
     env_file: .env
@@ -21,6 +22,7 @@ services:
       redis:
         condition: service_healthy
     command: python -m app.jobs.worker
+
   postgres:
     image: pgvector/pgvector:pg16
     environment:
@@ -36,6 +38,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
   redis:
     image: redis:7-alpine
     ports:
@@ -45,12 +48,14 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
   prometheus:
     image: prom/prometheus:latest
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
       - "9090:9090"
+
   grafana:
     image: grafana/grafana:latest
     ports:
@@ -59,6 +64,7 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin
     depends_on:
       - prometheus
+
   pgadmin:
     image: dpage/pgadmin4:latest
     environment:

@@ -57,8 +57,12 @@ class RequestRefundTool(BaseTool):
         description="Submit a refund request. High risk: requires explicit user confirmation.",
         input_schema={
             "type": "object",
-            "properties": {"ride_id": {"type": "string"}, "reason": {"type": "string"}},
-            "required": ["ride_id", "reason"],
+            "properties": {
+                "ride_id": {"type": "string", "description": "The ride ID to refund"},
+                "amount": {"type": "number", "description": "Refund amount in the user's currency"},
+                "reason": {"type": "string", "description": "Reason for the refund request"},
+            },
+            "required": ["ride_id", "amount", "reason"],
         },
         required_role=[UserRole.CUSTOMER, UserRole.SUPPORT_AGENT],
         risk_level=RiskLevel.HIGH,
@@ -73,4 +77,8 @@ class RequestRefundTool(BaseTool):
         return
 
     async def execute(self, ctx: ToolContext, arguments: dict[str, Any]) -> dict[str, Any]:
-        return await self.client.request_refund(arguments["ride_id"], arguments["reason"])
+        return await self.client.request_refund(
+            arguments["ride_id"],
+            arguments["reason"],
+            arguments.get("amount"),
+        )

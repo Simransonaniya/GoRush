@@ -40,29 +40,33 @@ class ContextService:
         return messages
 
     async def maybe_summarize(self, session_id: uuid.UUID) -> None:
-        recent = await self.conversations.get_recent_messages(session_id, limit=SUMMARIZE_AFTER_N_MESSAGES + 1)
-        if len(recent) <= SUMMARIZE_AFTER_N_MESSAGES:
-            return
+        try:
+            recent = await self.conversations.get_recent_messages(session_id, limit=SUMMARIZE_AFTER_N_MESSAGES + 1)
+            if len(recent) <= SUMMARIZE_AFTER_N_MESSAGES:
+                return
 
-        transcript = "\n".join(f"{m.role}: {m.content}" for m in recent[:-5])
-        schema = {
-            "type": "object",
-            "properties": {
-                "issue": {"type": "string"},
-                "ride_id": {"type": ["string", "null"]},
-                "previous_actions": {"type": "array", "items": {"type": "string"}},
-                "current_status": {"type": "string"},
-                "language": {"type": "string"},
-                "unresolved": {"type": "boolean"},
-            },
-            "required": ["issue", "current_status", "unresolved"],
-        }
-        summary_json = await self.llm.structured_output(
-            [ChatMessage(role="user", content=f"Summarize this support conversation:\n{transcript}")],
-            json_schema=schema,
-        )
-        self.db.add(ConversationSummary(session_id=session_id, summary_json=summary_json))
-        await self.db.flush()
+            transcript = "\n".join(f"{m.role}: {m.content}" for m in recent[:-5])
+            schema = {
+                "type": "object",
+                "properties": {
+                    "issue": {"type": "string"},
+                    "ride_id": {"type": ["string", "null"]},
+                    "previous_actions": {"type": "array", "items": {"type": "string"}},
+                    "current_status": {"type": "string"},
+                    "language": {"type": "string"},
+                    "unresolved": {"type": "boolean"},
+                },
+                "required": ["issue", "current_status", "unresolved"],
+            }
+            summary_json = await self.llm.structured_output(
+                [ChatMessage(role="user", content=f"Summarize this support conversation:\n{transcript}")],
+                json_schema=schema,
+            )
+            self.db.add(ConversationSummary(session_id=session_id, summary_json=summary_json))
+            await self.db.flush()
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(f"Summarization skipped for session {session_id}: {exc}")
 
     async def _get_latest_summary(self, session_id: uuid.UUID) -> str | None:
         from sqlalchemy import select

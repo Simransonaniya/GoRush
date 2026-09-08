@@ -1,4 +1,3 @@
-@'
 import asyncio
 
 from app.auth.security import hash_password
@@ -23,4 +22,3 @@ async def seed():
 
 if __name__ == "__main__":
     asyncio.run(seed())
-'@ | Set-Content -Path app\seed_user.py -Encoding utf8
