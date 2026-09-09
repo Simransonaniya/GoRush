@@ -120,6 +120,8 @@ class TestDriverIntents:
         "Customer didn't pay cash for the trip",
         "Cash ride payment dispute",
         "Rider ne cash nahi diya bill amount",
+        "ग्राहक ने भुगतान नहीं किया।",
+        "कैश भुगतान नहीं मिला",
     ])
     def test_cash_payment_help(self, phrase: str):
         res = intent_detector.detect(phrase)

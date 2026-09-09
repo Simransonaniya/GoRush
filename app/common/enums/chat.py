@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Any
 
 
 class UserRole(str, Enum):
@@ -15,8 +16,8 @@ class Language(str, Enum):
     HINDI = "hi"
     HINGLISH = "hi-en"
     MIXED = "mixed"
-    
-    # Phase 2 regional languages (Feature Flagged)
+
+    # Regional languages
     MARATHI = "mr"
     GUJARATI = "gu"
     BENGALI = "bn"
@@ -28,8 +29,27 @@ class Language(str, Enum):
     ODIA = "or"
     ASSAMESE = "as"
     URDU = "ur"
-    
+    RAJASTHANI = "raj"
+
     UNKNOWN = "unknown"
+
+    @classmethod
+    def normalize(cls, val: Any) -> "Language":
+        if isinstance(val, cls):
+            return val
+        if not val:
+            return cls.UNKNOWN
+        if hasattr(val, "value"):
+            val = val.value
+        val_str = str(val).lower().strip()
+        if val_str in ("hinglish", "hi-en", "hi_en"):
+            return cls.HINGLISH
+        if val_str in ("rajasthani", "raj"):
+            return cls.RAJASTHANI
+        try:
+            return cls(val_str)
+        except ValueError:
+            return cls.UNKNOWN
 
 
 class Priority(str, Enum):

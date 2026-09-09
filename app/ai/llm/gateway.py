@@ -1,3 +1,4 @@
+from app.ai.language.localization import get_localized_text
 from app.ai.llm.factory import build_llm_provider
 from app.ai.llm.provider import ChatMessage, LLMProvider, LLMResponse, ToolSpec
 from app.common.exceptions.base import UpstreamUnavailableError
@@ -30,6 +31,7 @@ class LLMGateway:
         tools: list[ToolSpec] | None = None,
         temperature: float = 0.3,
         max_tokens: int = 1024,
+        language: str = "en",
     ) -> LLMResponse:
         try:
             return await self.primary.chat(
@@ -44,4 +46,5 @@ class LLMGateway:
             )
         except UpstreamUnavailableError:
             logger.error("llm_fallback_also_failed")
-            return LLMResponse(text=DETERMINISTIC_FALLBACK_TEXT, model="deterministic-fallback")
+            fallback_text = get_localized_text("llm_fallback", language)
+            return LLMResponse(text=fallback_text, model="deterministic-fallback")

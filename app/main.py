@@ -57,4 +57,5 @@ async def on_startup():
             await conn.run_sync(Base.metadata.create_all)
         logger.info("db_init_success")
     except Exception as exc:
-        logger.warning("db_init_warning", error=str(exc))
+        logger.warning("db_init_warning", error=str(exc))
+

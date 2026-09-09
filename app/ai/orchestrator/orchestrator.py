@@ -10,10 +10,13 @@ from app.ai.llm.gateway import LLMGateway
 from app.ai.llm.provider import ChatMessage, ToolSpec
 from app.ai.orchestrator.loop_guard import LoopGuard, OrchestrationLimitExceededError
 from app.ai.orchestrator.schema import HandoffInfo, OrchestrationResult
+from app.ai.language.config import is_language_enabled
+from app.ai.language.localization import get_localized_text
+from app.ai.language.validator import validate_response_language
 from app.ai.prompts.registry import LANGUAGE_CODE_TO_NAME, get_prompt
 from app.audit.service import AuditService
 from app.common.enums.chat import Intent, MessageRole, Priority, UserRole
-from app.common.exceptions.base import ConfirmationRequiredError, ToolDeniedError
+from app.common.exceptions.base import ConfirmationRequiredError, ForbiddenError, ToolDeniedError
 from app.conversations.context_service import ContextService
 from app.conversations.service import ConversationService
 from app.core.config import get_settings
@@ -78,6 +81,7 @@ class ChatOrchestrator:
         user_id: uuid.UUID,
         role: UserRole,
         text: str,
+        idempotency_key: str | None = None,
     ) -> OrchestrationResult:
         loop_guard = LoopGuard(
             max_tool_calls=self.settings.max_tool_calls_per_turn,
@@ -89,6 +93,11 @@ class ChatOrchestrator:
         # 5-10: language, intent, sentiment, urgency, safety, injection detection
         input_check = input_guardrail_pipeline.run(text)
         intent_result: IntentResult = intent_detector.detect(text)
+
+        # Resolve pending intent if user message is a confirmation of a prior turn
+        resolved_intent = await self._resolve_pending_intent(session_id, text, intent_result.intent)
+        if resolved_intent != intent_result.intent:
+            intent_result = intent_result.model_copy(update={"intent": resolved_intent})
 
         await self.conversations.add_message(
             session_id, MessageRole.USER, text,
@@ -109,6 +118,24 @@ class ChatOrchestrator:
             return await self._handle_safety_escalation(
                 request_id=request_id, session_id=session_id, user_id=user_id,
                 role=role, text=text, intent_result=intent_result,
+            )
+
+        # Check feature-flag configuration for language support
+        if not is_language_enabled(intent_result.language):
+            fallback_text = get_localized_text("unsupported_language", "en")
+            await self.conversations.add_message(
+                session_id, MessageRole.ASSISTANT, fallback_text,
+                language=intent_result.language.value, intent=intent_result.intent.value,
+                metadata={"actions": [], "model": "feature-flag-fallback"},
+            )
+            return OrchestrationResult(
+                message=fallback_text,
+                language=intent_result.language,
+                intent=intent_result.intent,
+                actions=[],
+                handoff=HandoffInfo(),
+                llm_version="feature-flag-fallback",
+                prompt_version="unsupported_language_v1",
             )
 
         # 12-13: contextual retrieval (only when knowledge-driven, not blind full history)
@@ -170,7 +197,8 @@ class ChatOrchestrator:
             for _ in range(loop_guard.max_steps):
                 loop_guard.record_step()
                 response = await self.llm_gateway.chat_with_fallback(
-                    llm_messages, system=system_prompt, tools=tool_specs
+                    llm_messages, system=system_prompt, tools=tool_specs,
+                    language=intent_result.language.value,
                 )
                 model_version_str = response.model
                 llm_version = model_version_str
@@ -190,33 +218,58 @@ class ChatOrchestrator:
                     try:
                         result = await self.tool_router.invoke(
                             ctx=ctx, tool_name=call["name"], arguments=call.get("input", {}),
-                            user_confirmed=self._looks_like_confirmation(text),
+                            user_confirmed=self._is_user_confirming(text, llm_messages),
+                            idempotency_key=idempotency_key,
                         )
                         actions_taken.append(call["name"])
                         tool_results_text.append(f"Tool {call['name']} result: {json.dumps(result)}")
                     except ConfirmationRequiredError as exc:
                         tool_results_text.append(f"Tool {call['name']} needs user confirmation: {exc.message}")
-                    except ToolDeniedError as exc:
-                        tool_results_text.append(f"Tool {call['name']} denied: {exc.message}")
+                    except (ToolDeniedError, ForbiddenError) as exc:
+                        tool_results_text.append(f"Tool {call['name']} denied: {str(exc)}")
+                    except Exception as exc:
+                        tool_results_text.append(f"Tool {call['name']} execution failed: {str(exc)}")
 
                 llm_messages.append(ChatMessage(role="user", content="\n".join(tool_results_text)))
 
             else:
-                final_text = "Let me connect you with a support agent to make sure this is handled correctly."
+                final_text = get_localized_text("human_handoff", intent_result.language.value)
                 handoff_info = await self._escalate(
                     request_id, session_id, user_id, Priority.P2_STANDARD, "orchestration_limit",
                     intent_result, actions_taken,
                 )
 
         except OrchestrationLimitExceededError:
-            final_text = "Let me connect you with a support agent to make sure this is handled correctly."
+            final_text = get_localized_text("human_handoff", intent_result.language.value)
             handoff_info = await self._escalate(
                 request_id, session_id, user_id, Priority.P2_STANDARD, "loop_guard_triggered",
                 intent_result, actions_taken,
             )
 
-        # 20: output guardrails
+        # 20: output guardrails & language validation
         final_text = output_guardrail_pipeline.run(final_text)
+
+        if not validate_response_language(final_text, intent_result.language):
+            logger.warning(
+                "response_language_validation_failed",
+                expected_language=intent_result.language.value,
+            )
+            # Single retry with reinforced language constraint
+            retry_messages = llm_messages + [
+                ChatMessage(
+                    role="user",
+                    content=(
+                        f"[CRITICAL LANGUAGE CORRECTION] Your previous response was not in the required language/script. "
+                        f"You MUST regenerate the answer strictly in {detected_language_name}."
+                    ),
+                )
+            ]
+            retry_resp = await self.llm_gateway.chat_with_fallback(
+                retry_messages, system=system_prompt, tools=tool_specs,
+                language=intent_result.language.value,
+            )
+            if retry_resp.text:
+                final_text = output_guardrail_pipeline.run(retry_resp.text)
 
         # Explicit human-agent request
         if intent_result.intent == Intent.HUMAN_AGENT and not handoff_info.triggered:
@@ -226,10 +279,20 @@ class ChatOrchestrator:
             )
 
         # 21-23: persist assistant message + audit
+        is_pending_confirm = (not actions_taken) and any(
+            w in final_text.lower() for w in [
+                "confirm", "chahiye", "જોઈએ", "ਚਾਹੀਦਾ", "চাই", "आवश्यकता", "तक्रार", "dispute", "cancel", "refund"
+            ]
+        )
         await self.conversations.add_message(
             session_id, MessageRole.ASSISTANT, final_text,
             language=intent_result.language.value, intent=intent_result.intent.value,
-            metadata={"actions": actions_taken, "model": llm_version},
+            metadata={
+                "actions": actions_taken,
+                "model": llm_version,
+                "pending_intent": intent_result.intent.value,
+                "requires_confirmation": is_pending_confirm,
+            },
         )
         await self.context.maybe_summarize(session_id)
 
@@ -254,9 +317,9 @@ class ChatOrchestrator:
             request_id, session_id, user_id, Priority.P0_EMERGENCY, "safety_incident",
             intent_result, ["create_safety_incident"],
         )
-        reply = (
-            "I've alerted our safety team immediately and they're being connected to you now. "
-            f"Reference: {result.get('incident_id', 'pending')}. Please stay safe."
+        reply = get_localized_text(
+            "safety_escalation", intent_result.language.value,
+            incident_id=result.get('incident_id', 'pending')
         )
         await self.conversations.add_message(
             session_id, MessageRole.ASSISTANT, reply, language=intent_result.language.value,
@@ -283,7 +346,90 @@ class ChatOrchestrator:
         )
         return HandoffInfo(triggered=True, priority=priority, reason=reason, handoff_id=str(handoff.id))
 
+    async def _resolve_pending_intent(
+        self, session_id: uuid.UUID, current_text: str, detected_intent: Intent
+    ) -> Intent:
+        if not self._is_confirmation_text(current_text):
+            return detected_intent
+
+        recent_messages = await self.conversations.get_recent_messages(session_id, limit=5)
+        if not recent_messages:
+            return detected_intent
+
+        last_assistant_msg = next((m for m in reversed(recent_messages) if str(m.role).lower() in ("assistant", "messagerole.assistant")), None)
+        if not last_assistant_msg:
+            return detected_intent
+
+        meta = last_assistant_msg.metadata_json or {}
+        requires_confirm = meta.get("requires_confirmation") or any(
+            w in (last_assistant_msg.content or "").lower() for w in [
+                "confirm", "chahiye", "જોઈએ", "ਚਾਹੀਦਾ", "চাই", "आवश्यकता", "तक्रार", "dispute", "cancel", "refund"
+            ]
+        )
+
+        if not requires_confirm:
+            return detected_intent
+
+        pending_intent_str = meta.get("pending_intent") or last_assistant_msg.intent
+        if not pending_intent_str or pending_intent_str == Intent.UNKNOWN.value:
+            last_user_msg = next((m for m in reversed(recent_messages) if str(m.role).lower() in ("user", "messagerole.user")), None)
+            if last_user_msg:
+                pending_intent_str = last_user_msg.intent
+
+        if pending_intent_str and pending_intent_str != Intent.UNKNOWN.value:
+            try:
+                return Intent(pending_intent_str)
+            except ValueError:
+                pass
+
+        return detected_intent
+
     @staticmethod
-    def _looks_like_confirmation(text: str) -> bool:
+    def _is_confirmation_text(text: str) -> bool:
+        import re
         normalized = text.strip().lower()
-        return normalized in {"yes", "confirm", "ok", "haan", "ha", "yes please", "confirm karo"}
+        clean = re.sub(r"[^\w\s\u0900-\u097F\u0A80-\u0AFF\u0980-\u09FF\u0A00-\u0A7F]", " ", normalized)
+        clean = " ".join(clean.split())
+
+        exact_affirmatives = {
+            "yes", "confirm", "ok", "okay", "sure", "proceed", "do it", "yes please", "go ahead",
+            "haan", "ha", "haa", "bilkul", "kar do", "karo", "start kar do", "shuru kar do",
+            "haan kar do", "haan start kar do", "haan shuru", "bilkul kar do",
+            "हाँ", "हौ", "होय", "बिलकुल", "शुरू कर दो", "कर दो", "करो", "हाँ शुरू कर दो", "हाँ कर दो",
+            "હા", "શરૂ કરો", "કરી દો", "હા શરૂ કરો", "હા કરો",
+            "হ্যাঁ", "শুরু করুন", "করুন", "হ্যাঁ শুরু করুন", "হ্যাঁ করুন",
+            "ਹਾਂ", "ਸ਼ੁਰੂ ਕਰੋ", "ਕਰੋ", "ਹਾਂਜੀ", "ਹਾਂ ਕਰੋ",
+            "करा", "सुरू करा"
+        }
+        if clean in exact_affirmatives or normalized in exact_affirmatives:
+            return True
+
+        keywords = [
+            "yes", "confirm", "ok", "okay", "sure", "proceed", "do it", "yes please", "go ahead",
+            "haan", "ha", "bilkul", "kar do", "karo", "shuru", "start",
+            "हाँ", "हौ", "होय", "बिलकुल", "शुरू", "कर दो", "करो",
+            "હા", "શરૂ", "કરી", "হ্যাঁ", "করুন", "ਹਾਂ", "करा"
+        ]
+        if any(w in clean for w in keywords):
+            return True
+
+        return False
+
+    @classmethod
+    def _is_user_confirming(cls, text: str, history: list[ChatMessage] | None = None) -> bool:
+        if cls._is_confirmation_text(text):
+            return True
+        normalized = text.strip().lower()
+        has_prior_confirmation_prompt = False
+        if history:
+            has_prior_confirmation_prompt = any(
+                m.role == "assistant" and any(
+                    w in (m.content or "").lower() for w in [
+                        "confirm", "chahiye", "જોઈએ", "ਚਾਹੀਦਾ", "চাই", "आवश्यकता", "गरज", "तक्रार", "पुष्टि", "নিশ্চিতকরণ"
+                    ]
+                )
+                for m in history
+            )
+        if has_prior_confirmation_prompt and any(w in normalized for w in ["yes", "confirm", "haan", "ha", "ok", "kar do", "karo"]):
+            return True
+        return False

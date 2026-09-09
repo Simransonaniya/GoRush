@@ -96,6 +96,7 @@ async def send_message(
         user_id=ctx.user_id,
         role=ctx.role,
         text=payload.message,
+        idempotency_key=payload.idempotency_key,
     )
     await db.commit()
 

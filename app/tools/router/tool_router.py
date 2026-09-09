@@ -51,7 +51,11 @@ class ToolRouter:
         await tool.authorize_ownership(ctx, arguments)
 
         # 3. Confirmation gate for high-risk actions
-        if definition.requires_confirmation and not user_confirmed:
+        needs_confirmation = (
+            definition.requires_confirmation
+            or (tool_name == "create_support_ticket" and arguments.get("category") == "payment_dispute")
+        )
+        if needs_confirmation and not user_confirmed:
             await self.audit.record(
                 request_id=ctx.request_id, action="tool_confirmation_required",
                 decision="pending", user_id=uuid.UUID(ctx.user_id), session_id=uuid.UUID(ctx.session_id),

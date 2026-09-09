@@ -24,7 +24,24 @@ INTENT_KEYWORD_MAP: list[tuple[Intent, re.Pattern]] = [
     (Intent.VEHICLE_DOCUMENT, re.compile(r"vehicle (document|support|change)|add vehicle|change vehicle|update rc|gadi badalna|new vehicle", re.I)),
     (Intent.NAVIGATION, re.compile(r"navigation|gps|map issue|map wrong|galat route|map nahi chal", re.I)),
     (Intent.APP_TROUBLESHOOTING, re.compile(r"app (crash|freeze|freezing|hang|issue|kharab|update)", re.I)),
-    (Intent.CASH_PAYMENT, re.compile(r"cash payment|cash ride|customer didn'?t pay|cash nahi diya|cash collection|cash amount", re.I)),
+    (Intent.CASH_PAYMENT, re.compile(
+        r"cash payment|cash ride|customer didn'?t pay|customer did not|customer has not paid|cash nahi diya|cash collection|cash amount"
+        r"|payment nahi|ne payment|payment nahi kiya|payment nahi mila|payment nahi hua|pay nahi kiya|payment नहीं"
+        r"|भुगतान नहीं|पैसे नहीं दिए|कैश नहीं दिया|रुपये नहीं दिए|पैसे नहीं मिले|कैश नहीं मिला"
+        r"|भुगतान कोनी|कोनी कर्यो|पिया कोनी|पैसे कोनी|कोनी दिया|koni karyo|koni"
+        r"|ਭੁਗਤਾਨ ਨਹੀਂ ਕੀਤਾ|ਪੇਮੈਂਟ ਨਹੀਂ|ਕੀਤਾ|kiti|kitta|ਪੈਸੇ ਨਹੀਂ ਦਿੱਤੇ"
+        r"|ચુકવણી કરી નથી|ચુકવણી નથી|nathi kari|nathi|પૈસા નથી આપ્યા|payment કર્યું નથી"
+        r"|পেমেন্ট করেনি|পেমেন্ট হয়নি|টাকা দেয়নি|পেমেন্ট|ক্যাশ|payment করেনি"
+        r"|पेमेंट केले नाही|पैसे दिले नाहीत|कॅश दिली नाही"
+        r"|பணம் செலுத்தவில்லை|பணம் தரவில்லை"
+        r"|చెల్లింపు చేయలేదు|డబ్బులు ఇవ్వలేదు"
+        r"|ಪಾವತಿ ಮಾಡಲಿಲ್ಲ|ಹಣ ನೀಡಲಿಲ್ಲ"
+        r"|പണമടച്ചില്ല|പണം നൽകിയില്ല"
+        r"|ଦେୟ ଦେଇନାହାଁନ୍ତି|ଟଙ୍କା ଦେଇନାହାଁନ୍ତି"
+        r"|পৰিশোধ কৰা নাই|টকা দিয়া নাই"
+        r"|ادائیگی نہیں کی|رقم نہیں دی",
+        re.I,
+    )),
     # Customer / Driver overlapping intents
     (Intent.DRIVER_CANCELLED, re.compile(r"driver.*(cancel|cancelled)|driver ne cancel", re.I)),
     (Intent.DRIVER_LATE, re.compile(r"driver.*(late|not come|nahi aa raha|aayega|come|arrive|kab aayega|delay)", re.I)),
