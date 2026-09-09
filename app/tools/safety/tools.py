@@ -24,6 +24,7 @@ class CreateSafetyIncidentTool(BaseTool):
         required_role=[UserRole.CUSTOMER, UserRole.DRIVER, UserRole.SAFETY_AGENT, UserRole.SUPPORT_AGENT],
         risk_level=RiskLevel.CRITICAL,
         requires_confirmation=False,  # emergency flow: act first, never gate on "are you sure?"
+        requires_idempotency_key=True,  # BRD S5: prevent duplicate incidents on network retry
     )
 
     def __init__(self, client: GoRushSafetyClient):

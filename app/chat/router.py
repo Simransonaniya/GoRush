@@ -51,12 +51,14 @@ async def create_session(
 async def get_session(
     session_id: uuid.UUID,
     request: Request,
+    limit: int = 50,
+    offset: int = 0,
     ctx: AuthContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     conversations = ConversationService(db)
     session = await conversations.get_session(session_id, ctx.user_id)
-    messages = await conversations.get_recent_messages(session_id, limit=50)
+    messages = await conversations.get_recent_messages(session_id, limit=limit, offset=offset)
     return {
         "success": True,
         "data": {
@@ -67,6 +69,38 @@ async def get_session(
                 {"role": m.role, "content": m.content, "created_at": m.created_at.isoformat()}
                 for m in messages
             ],
+            "limit": limit,
+            "offset": offset,
+        },
+        "meta": {"request_id": request.state.request_id, "timestamp": _now_iso()},
+    }
+
+
+@router.get("/knowledge/{article_id}")
+async def get_knowledge_article(
+    article_id: uuid.UUID,
+    request: Request,
+    ctx: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.common.exceptions.base import NotFoundError
+    from app.knowledge.models import KnowledgeArticle
+
+    article = await db.get(KnowledgeArticle, article_id)
+    if article is None or article.status != "active" or article.approval_status != "approved":
+        raise NotFoundError("Approved knowledge article not found")
+
+    return {
+        "success": True,
+        "data": {
+            "id": str(article.id),
+            "title": article.title,
+            "content": article.content,
+            "category": article.category,
+            "language": article.language,
+            "version": article.version,
+            "status": article.status,
+            "approval_status": article.approval_status,
         },
         "meta": {"request_id": request.state.request_id, "timestamp": _now_iso()},
     }

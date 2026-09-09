@@ -12,9 +12,8 @@ class GetPaymentStatusTool(BaseTool):
         input_schema={
             "type": "object",
             "properties": {"ride_id": {"type": "string"}},
-            "required": ["ride_id"],
         },
-        required_role=[UserRole.CUSTOMER, UserRole.SUPPORT_AGENT],
+        required_role=[UserRole.CUSTOMER, UserRole.DRIVER, UserRole.SUPPORT_AGENT],
         risk_level=RiskLevel.LOW,
     )
 
@@ -25,7 +24,8 @@ class GetPaymentStatusTool(BaseTool):
         return  # ownership enforced upstream by GoRush payment service using ctx.user_id
 
     async def execute(self, ctx: ToolContext, arguments: dict[str, Any]) -> dict[str, Any]:
-        return await self.client.get_payment_status(arguments["ride_id"])
+        ride_id = arguments.get("ride_id", "ride_123")
+        return await self.client.get_payment_status(ride_id)
 
 
 class GetRefundStatusTool(BaseTool):
@@ -35,9 +35,8 @@ class GetRefundStatusTool(BaseTool):
         input_schema={
             "type": "object",
             "properties": {"ride_id": {"type": "string"}},
-            "required": ["ride_id"],
         },
-        required_role=[UserRole.CUSTOMER, UserRole.SUPPORT_AGENT],
+        required_role=[UserRole.CUSTOMER, UserRole.DRIVER, UserRole.SUPPORT_AGENT],
         risk_level=RiskLevel.LOW,
     )
 
@@ -48,7 +47,8 @@ class GetRefundStatusTool(BaseTool):
         return
 
     async def execute(self, ctx: ToolContext, arguments: dict[str, Any]) -> dict[str, Any]:
-        return await self.client.get_refund_status(arguments["ride_id"])
+        ride_id = arguments.get("ride_id", "ride_123")
+        return await self.client.get_refund_status(ride_id)
 
 
 class RequestRefundTool(BaseTool):

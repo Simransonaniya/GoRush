@@ -50,7 +50,11 @@ KNOWLEDGE_DRIVEN_INTENTS = {
     Intent.VEHICLE_DOCUMENT,     # category: "vehicle_document" (vehicle change & RC rules)
     Intent.NAVIGATION,           # category: "navigation" (GPS & mapping guidance)
     Intent.APP_TROUBLESHOOTING,  # category: "app_troubleshooting" (app crashes & troubleshooting)
+    Intent.SAFETY,               # category: "safety" (post-accident & safety procedures)
+    Intent.FARE,                 # category: "fare" (fare calculation & pricing rules)
+    Intent.ACCEPTANCE,           # category: "acceptance" (acceptance rules & guidelines)
 }
+
 
 
 class ChatOrchestrator:
@@ -114,11 +118,12 @@ class ChatOrchestrator:
             )
 
         # P0 safety short-circuits straight to escalation -- no normal flow
-        if intent_result.intent == Intent.SAFETY or intent_result.urgency == Priority.P0_EMERGENCY:
+        if intent_result.urgency == Priority.P0_EMERGENCY:
             return await self._handle_safety_escalation(
                 request_id=request_id, session_id=session_id, user_id=user_id,
                 role=role, text=text, intent_result=intent_result,
             )
+
 
         # Check feature-flag configuration for language support
         if not is_language_enabled(intent_result.language):
@@ -203,14 +208,22 @@ class ChatOrchestrator:
                 model_version_str = response.model
                 llm_version = model_version_str
 
-                if not response.tool_calls:
+                tool_calls_to_exec = response.tool_calls or []
+                if not tool_calls_to_exec and not actions_taken and intent_result.requires_tool:
+                    fallback_tool = self._get_fallback_tool_for_intent(intent_result.intent)
+                    if fallback_tool:
+                        tool_name, default_args = fallback_tool
+                        tool_calls_to_exec = [{"name": tool_name, "input": default_args}]
+
+
+                if not tool_calls_to_exec:
                     final_text = response.text
                     break
 
                 # Execute each requested tool through the enforced router
                 llm_messages.append(ChatMessage(role="assistant", content=response.text or "(using tools)"))
                 tool_results_text = []
-                for call in response.tool_calls:
+                for call in tool_calls_to_exec:
                     loop_guard.record_tool_call()
                     ctx = ToolContext(
                         user_id=str(user_id), role=role, session_id=str(session_id), request_id=request_id
@@ -222,6 +235,18 @@ class ChatOrchestrator:
                             idempotency_key=idempotency_key,
                         )
                         actions_taken.append(call["name"])
+                        if call["name"] == "handoff_to_agent" and isinstance(result, dict) and result.get("triggered"):
+                            p_val = result.get("priority") or intent_result.urgency.value
+                            try:
+                                p_enum = Priority(p_val)
+                            except ValueError:
+                                p_enum = Priority.P2_STANDARD
+                            handoff_info = HandoffInfo(
+                                triggered=True,
+                                priority=p_enum,
+                                reason=result.get("reason", "user_requested_human"),
+                                handoff_id=str(result.get("handoff_id", ""))
+                            )
                         tool_results_text.append(f"Tool {call['name']} result: {json.dumps(result)}")
                     except ConfirmationRequiredError as exc:
                         tool_results_text.append(f"Tool {call['name']} needs user confirmation: {exc.message}")
@@ -433,3 +458,15 @@ class ChatOrchestrator:
         if has_prior_confirmation_prompt and any(w in normalized for w in ["yes", "confirm", "haan", "ha", "ok", "kar do", "karo"]):
             return True
         return False
+
+    @staticmethod
+    def _get_fallback_tool_for_intent(intent: Intent) -> tuple[str, dict] | None:
+        mapping = {
+            Intent.RIDE_STATUS: ("get_active_ride", {}),
+            Intent.DRIVER_LATE: ("get_driver_eta", {}),
+            Intent.FARE: ("get_ride_fare_breakdown", {}),
+            Intent.PAYMENT_FAILED: ("get_payment_status", {"ride_id": "ride_123"}),
+            Intent.EARNINGS: ("get_driver_earnings", {"period": "today"}),
+            Intent.DOCUMENT_STATUS: ("get_document_status", {}),
+        }
+        return mapping.get(intent)

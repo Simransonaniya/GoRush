@@ -53,11 +53,12 @@ class ConversationService:
         await self.db.flush()
         return message
 
-    async def get_recent_messages(self, session_id: uuid.UUID, limit: int = 20) -> list[ChatMessage]:
+    async def get_recent_messages(self, session_id: uuid.UUID, limit: int = 50, offset: int = 0) -> list[ChatMessage]:
         result = await self.db.execute(
             select(ChatMessage)
             .where(ChatMessage.session_id == session_id)
             .order_by(ChatMessage.created_at.desc())
+            .offset(offset)
             .limit(limit)
         )
         return list(reversed(result.scalars().all()))

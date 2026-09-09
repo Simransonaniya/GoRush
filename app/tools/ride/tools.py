@@ -33,9 +33,8 @@ class GetDriverEtaTool(BaseTool):
         input_schema={
             "type": "object",
             "properties": {"ride_id": {"type": "string"}},
-            "required": ["ride_id"],
         },
-        required_role=[UserRole.CUSTOMER, UserRole.SUPPORT_AGENT],
+        required_role=[UserRole.CUSTOMER, UserRole.DRIVER, UserRole.SUPPORT_AGENT],
         risk_level=RiskLevel.LOW,
     )
 
@@ -43,12 +42,20 @@ class GetDriverEtaTool(BaseTool):
         self.client = client
 
     async def authorize_ownership(self, ctx: ToolContext, arguments: dict[str, Any]) -> None:
+        ride_id = arguments.get("ride_id")
         ride = await self.client.get_active_ride(ctx.user_id)
-        if not ride or ride["ride_id"] != arguments.get("ride_id"):
+        if ride_id and (not ride or ride.get("ride_id") != ride_id):
             raise ForbiddenError("Ride does not belong to the requesting user")
 
     async def execute(self, ctx: ToolContext, arguments: dict[str, Any]) -> dict[str, Any]:
-        return await self.client.get_driver_eta(arguments["ride_id"])
+        ride_id = arguments.get("ride_id")
+        if not ride_id:
+            ride = await self.client.get_active_ride(ctx.user_id)
+            if not ride:
+                from app.common.exceptions.base import RideNotFoundError
+                raise RideNotFoundError("No active ride found")
+            ride_id = ride["ride_id"]
+        return await self.client.get_driver_eta(ride_id)
 
 
 class GetFareBreakdownTool(BaseTool):
@@ -58,9 +65,8 @@ class GetFareBreakdownTool(BaseTool):
         input_schema={
             "type": "object",
             "properties": {"ride_id": {"type": "string"}},
-            "required": ["ride_id"],
         },
-        required_role=[UserRole.CUSTOMER, UserRole.SUPPORT_AGENT],
+        required_role=[UserRole.CUSTOMER, UserRole.DRIVER, UserRole.SUPPORT_AGENT],
         risk_level=RiskLevel.LOW,
     )
 
@@ -68,12 +74,21 @@ class GetFareBreakdownTool(BaseTool):
         self.client = client
 
     async def authorize_ownership(self, ctx: ToolContext, arguments: dict[str, Any]) -> None:
+        ride_id = arguments.get("ride_id")
         ride = await self.client.get_active_ride(ctx.user_id)
-        if not ride or ride["ride_id"] != arguments.get("ride_id"):
+        if ride_id and (not ride or ride.get("ride_id") != ride_id):
             raise ForbiddenError("Ride does not belong to the requesting user")
 
     async def execute(self, ctx: ToolContext, arguments: dict[str, Any]) -> dict[str, Any]:
-        return await self.client.get_fare_breakdown(arguments["ride_id"])
+        ride_id = arguments.get("ride_id")
+        if not ride_id:
+            ride = await self.client.get_active_ride(ctx.user_id)
+            if not ride:
+                from app.common.exceptions.base import RideNotFoundError
+                raise RideNotFoundError("No active ride found")
+            ride_id = ride["ride_id"]
+        return await self.client.get_fare_breakdown(ride_id)
+
 
 
 class CancelRideTool(BaseTool):

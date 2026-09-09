@@ -58,14 +58,39 @@ class ConfirmationRequiredError(AppError):
 
 
 class UpstreamUnavailableError(AppError):
-    code = "UPSTREAM_UNAVAILABLE"
+    code = "SERVICE_UNAVAILABLE"
     http_status = 503
     retryable = True
 
 
 class RateLimitExceededError(AppError):
-    code = "RATE_LIMIT_EXCEEDED"
+    code = "RATE_LIMITED"
     http_status = 429
+    retryable = True
+
+
+class NotEligibleError(AppError):
+    """The resource exists but the requested action is not permitted by policy."""
+    code = "NOT_ELIGIBLE"
+    http_status = 422
+
+
+class ConflictError(AppError):
+    """The request conflicts with current state (e.g. ride already cancelled)."""
+    code = "CONFLICT"
+    http_status = 409
+
+
+class DuplicateRequestError(AppError):
+    """Idempotency key was already used for a different payload."""
+    code = "DUPLICATE_REQUEST"
+    http_status = 409
+
+
+class ToolTimeoutError(AppError):
+    """The upstream GoRush service did not respond in time."""
+    code = "TOOL_TIMEOUT"
+    http_status = 504
     retryable = True
 
 

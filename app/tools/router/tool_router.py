@@ -78,7 +78,7 @@ class ToolRouter:
             message_id=message_id,
             user_id=uuid.UUID(ctx.user_id),
             tool_name=tool_name,
-            risk_level=definition.risk_level.value,
+            risk_level=definition.risk_level.value if hasattr(definition.risk_level, 'value') else definition.risk_level,
             arguments=arguments,
             status=ToolExecutionStatus.PENDING,
             idempotency_key=idempotency_key,

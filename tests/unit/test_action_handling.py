@@ -424,6 +424,192 @@ class TestPendingIntentActionHandling:
             assert res.actions == []
 
 
+class TestIntentToolMappingDispatch:
+    """Verifies that intent detection dispatches the corresponding tool and returns real tool result."""
+
+    @pytest.mark.asyncio
+    async def test_1_where_is_my_active_ride(self, mock_db, mock_redis):
+        orchestrator = ChatOrchestrator(mock_db, mock_redis)
+        session_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+
+        with patch.object(orchestrator.conversations, 'add_message', new=AsyncMock()), \
+             patch.object(orchestrator.conversations, 'get_session', new=AsyncMock()), \
+             patch.object(orchestrator.conversations, 'get_recent_messages', new=AsyncMock(return_value=[])), \
+             patch.object(orchestrator.context, 'build_llm_messages', new=AsyncMock(return_value=[])), \
+             patch.object(orchestrator.context, 'maybe_summarize', new=AsyncMock()):
+
+            res: OrchestrationResult = await orchestrator.handle_message(
+                request_id="req-ride-1", session_id=session_id, user_id=user_id,
+                role=UserRole.DRIVER, text="Where is my active ride?",
+            )
+
+            assert res.intent == Intent.RIDE_STATUS
+            assert res.actions == ["get_active_ride"]
+            assert "ride_123" in res.message or "active ride" in res.message.lower()
+
+    @pytest.mark.asyncio
+    async def test_2_what_is_my_eta(self, mock_db, mock_redis):
+        orchestrator = ChatOrchestrator(mock_db, mock_redis)
+        session_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+
+        with patch.object(orchestrator.conversations, 'add_message', new=AsyncMock()), \
+             patch.object(orchestrator.conversations, 'get_session', new=AsyncMock()), \
+             patch.object(orchestrator.conversations, 'get_recent_messages', new=AsyncMock(return_value=[])), \
+             patch.object(orchestrator.context, 'build_llm_messages', new=AsyncMock(return_value=[])), \
+             patch.object(orchestrator.context, 'maybe_summarize', new=AsyncMock()):
+
+            res: OrchestrationResult = await orchestrator.handle_message(
+                request_id="req-eta-1", session_id=session_id, user_id=user_id,
+                role=UserRole.CUSTOMER, text="What is my ETA?",
+            )
+
+            assert res.actions == ["get_driver_eta"]
+
+    @pytest.mark.asyncio
+    async def test_3_how_much_was_the_fare(self, mock_db, mock_redis):
+        orchestrator = ChatOrchestrator(mock_db, mock_redis)
+        session_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+
+        with patch.object(orchestrator.conversations, 'add_message', new=AsyncMock()), \
+             patch.object(orchestrator.conversations, 'get_session', new=AsyncMock()), \
+             patch.object(orchestrator.conversations, 'get_recent_messages', new=AsyncMock(return_value=[])), \
+             patch.object(orchestrator.context, 'build_llm_messages', new=AsyncMock(return_value=[])), \
+             patch.object(orchestrator.context, 'maybe_summarize', new=AsyncMock()):
+
+            res: OrchestrationResult = await orchestrator.handle_message(
+                request_id="req-fare-1", session_id=session_id, user_id=user_id,
+                role=UserRole.CUSTOMER, text="How much was the fare?",
+            )
+
+            assert res.actions == ["get_ride_fare_breakdown"]
+
+    @pytest.mark.asyncio
+    async def test_4_what_is_my_payment_status(self, mock_db, mock_redis):
+        orchestrator = ChatOrchestrator(mock_db, mock_redis)
+        session_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+
+        with patch.object(orchestrator.conversations, 'add_message', new=AsyncMock()), \
+             patch.object(orchestrator.conversations, 'get_session', new=AsyncMock()), \
+             patch.object(orchestrator.conversations, 'get_recent_messages', new=AsyncMock(return_value=[])), \
+             patch.object(orchestrator.context, 'build_llm_messages', new=AsyncMock(return_value=[])), \
+             patch.object(orchestrator.context, 'maybe_summarize', new=AsyncMock()):
+
+            res: OrchestrationResult = await orchestrator.handle_message(
+                request_id="req-pay-1", session_id=session_id, user_id=user_id,
+                role=UserRole.CUSTOMER, text="What is my payment status?",
+            )
+
+            assert res.actions == ["get_payment_status"]
+
+    @pytest.mark.asyncio
+    async def test_5_how_much_did_i_earn(self, mock_db, mock_redis):
+        orchestrator = ChatOrchestrator(mock_db, mock_redis)
+        session_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+
+        with patch.object(orchestrator.conversations, 'add_message', new=AsyncMock()), \
+             patch.object(orchestrator.conversations, 'get_session', new=AsyncMock()), \
+             patch.object(orchestrator.conversations, 'get_recent_messages', new=AsyncMock(return_value=[])), \
+             patch.object(orchestrator.context, 'build_llm_messages', new=AsyncMock(return_value=[])), \
+             patch.object(orchestrator.context, 'maybe_summarize', new=AsyncMock()):
+
+            res: OrchestrationResult = await orchestrator.handle_message(
+                request_id="req-earn-1", session_id=session_id, user_id=user_id,
+                role=UserRole.DRIVER, text="How much did I earn?",
+            )
+
+            assert res.actions == ["get_driver_earnings"]
+
+    @pytest.mark.asyncio
+    async def test_6_hindi_active_ride(self, mock_db, mock_redis):
+        orchestrator = ChatOrchestrator(mock_db, mock_redis)
+        session_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+
+        with patch.object(orchestrator.conversations, 'add_message', new=AsyncMock()), \
+             patch.object(orchestrator.conversations, 'get_session', new=AsyncMock()), \
+             patch.object(orchestrator.conversations, 'get_recent_messages', new=AsyncMock(return_value=[])), \
+             patch.object(orchestrator.context, 'build_llm_messages', new=AsyncMock(return_value=[])), \
+             patch.object(orchestrator.context, 'maybe_summarize', new=AsyncMock()):
+
+            res: OrchestrationResult = await orchestrator.handle_message(
+                request_id="req-hi-1", session_id=session_id, user_id=user_id,
+                role=UserRole.DRIVER, text="मेरी एक्टिव राइड कहाँ है?",
+            )
+
+            assert res.language == Language.HINDI
+            assert res.intent == Intent.RIDE_STATUS
+            assert res.actions == ["get_active_ride"]
+
+    @pytest.mark.asyncio
+    async def test_7_hinglish_active_ride(self, mock_db, mock_redis):
+        orchestrator = ChatOrchestrator(mock_db, mock_redis)
+        session_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+
+        with patch.object(orchestrator.conversations, 'add_message', new=AsyncMock()), \
+             patch.object(orchestrator.conversations, 'get_session', new=AsyncMock()), \
+             patch.object(orchestrator.conversations, 'get_recent_messages', new=AsyncMock(return_value=[])), \
+             patch.object(orchestrator.context, 'build_llm_messages', new=AsyncMock(return_value=[])), \
+             patch.object(orchestrator.context, 'maybe_summarize', new=AsyncMock()):
+
+            res: OrchestrationResult = await orchestrator.handle_message(
+                request_id="req-hien-1", session_id=session_id, user_id=user_id,
+                role=UserRole.DRIVER, text="Meri active ride kahan hai?",
+            )
+
+            assert res.language == Language.HINGLISH
+            assert res.intent == Intent.RIDE_STATUS
+            assert res.actions == ["get_active_ride"]
+
+    @pytest.mark.asyncio
+    async def test_8_gujarati_active_ride(self, mock_db, mock_redis):
+        orchestrator = ChatOrchestrator(mock_db, mock_redis)
+        session_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+
+        with patch.object(orchestrator.conversations, 'add_message', new=AsyncMock()), \
+             patch.object(orchestrator.conversations, 'get_session', new=AsyncMock()), \
+             patch.object(orchestrator.conversations, 'get_recent_messages', new=AsyncMock(return_value=[])), \
+             patch.object(orchestrator.context, 'build_llm_messages', new=AsyncMock(return_value=[])), \
+             patch.object(orchestrator.context, 'maybe_summarize', new=AsyncMock()):
+
+            res: OrchestrationResult = await orchestrator.handle_message(
+                request_id="req-gu-1", session_id=session_id, user_id=user_id,
+                role=UserRole.DRIVER, text="મારી એક્ટિવ રાઇડ ક્યાં છે?",
+            )
+
+            assert res.language == Language.GUJARATI
+            assert res.intent == Intent.RIDE_STATUS
+            assert res.actions == ["get_active_ride"]
+
+    @pytest.mark.asyncio
+    async def test_9_bengali_active_ride(self, mock_db, mock_redis):
+        orchestrator = ChatOrchestrator(mock_db, mock_redis)
+        session_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+
+        with patch.object(orchestrator.conversations, 'add_message', new=AsyncMock()), \
+             patch.object(orchestrator.conversations, 'get_session', new=AsyncMock()), \
+             patch.object(orchestrator.conversations, 'get_recent_messages', new=AsyncMock(return_value=[])), \
+             patch.object(orchestrator.context, 'build_llm_messages', new=AsyncMock(return_value=[])), \
+             patch.object(orchestrator.context, 'maybe_summarize', new=AsyncMock()):
+
+            res: OrchestrationResult = await orchestrator.handle_message(
+                request_id="req-bn-1", session_id=session_id, user_id=user_id,
+                role=UserRole.DRIVER, text="আমার সক্রিয় রাইড কোথায়?",
+            )
+
+            assert res.language == Language.BENGALI
+            assert res.intent == Intent.RIDE_STATUS
+            assert res.actions == ["get_active_ride"]
+
+
 def orchestrator_registry():
     from app.tools.registry.registry import build_default_registry
     return build_default_registry()
+
