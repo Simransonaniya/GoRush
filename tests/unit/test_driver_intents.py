@@ -149,3 +149,136 @@ class TestDriverIntents:
         assert res.intent == Intent.SAFETY
         assert res.urgency == Priority.P0_EMERGENCY
         assert res.risk_level == RiskLevel.CRITICAL
+
+
+import uuid
+from unittest.mock import AsyncMock, MagicMock
+from app.ai.orchestrator.orchestrator import ChatOrchestrator
+from app.common.enums.chat import UserRole, Language
+
+
+@pytest.fixture
+def mock_db_driver():
+    db = AsyncMock()
+    db.flush = AsyncMock()
+    db.commit = AsyncMock()
+    db.add = MagicMock()
+    mock_result = MagicMock()
+    mock_result.all.return_value = []
+    mock_result.scalars.return_value.all.return_value = []
+    db.execute = AsyncMock(return_value=mock_result)
+    return db
+
+
+@pytest.fixture
+def mock_redis_driver():
+    redis = AsyncMock()
+    redis.get = AsyncMock(return_value=None)
+    redis.set = AsyncMock(return_value=None)
+    return redis
+
+
+class TestDriverIntentsRegression:
+    """End-to-end integration and orchestrator regression tests for driver problematic cases."""
+
+    @pytest.mark.asyncio
+    async def test_driver_orchestrator_routing(self, mock_db_driver, mock_redis_driver):
+        orchestrator = ChatOrchestrator(mock_db_driver, mock_redis_driver)
+        session_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+
+        mock_session = MagicMock()
+        mock_session.id = session_id
+        mock_session.user_id = user_id
+        mock_session.language = "hi-en"
+        orchestrator.conversations.get_session = AsyncMock(return_value=mock_session)
+
+        # 1. Payout
+        res1 = await orchestrator.handle_message(
+            request_id="req_payout",
+            session_id=session_id,
+            user_id=user_id,
+            role=UserRole.DRIVER,
+            text="Meri payment kab aayegi?"
+        )
+        assert res1.intent == Intent.PAYOUT
+        assert "get_driver_earnings" in res1.actions
+        assert "payout" in res1.message.lower() or "earnings" in res1.message.lower() or "कमाई" in res1.message
+
+        # 2. Customer not found
+        res2 = await orchestrator.handle_message(
+            request_id="req_cnf",
+            session_id=session_id,
+            user_id=user_id,
+            role=UserRole.DRIVER,
+            text="Mera passenger mujhe nahi mil raha."
+        )
+        assert res2.intent == Intent.CUSTOMER_NOT_FOUND
+        assert "get_active_ride" in res2.actions
+        assert "ride_123" in res2.message or "active" in res2.message.lower() or "passenger" in res2.message.lower() or "कॉल" in res2.message
+
+        # 3. Document status / verification
+        res3 = await orchestrator.handle_message(
+            request_id="req_verif",
+            session_id=session_id,
+            user_id=user_id,
+            role=UserRole.DRIVER,
+            text="Mera driver verification pending hai."
+        )
+        assert res3.intent == Intent.DOCUMENT_STATUS
+        assert "get_document_status" in res3.actions
+        assert "approved" in res3.message.lower() or "status" in res3.message.lower() or "दस्तावेज़" in res3.message
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("query,expected_lang,expected_intent,expected_action,expected_handoff", [
+        # Baseline working case
+        ("Aaj meri total earning kitni hai?", Language.HINGLISH, Intent.EARNINGS, "get_driver_earnings", False),
+        # Case 1
+        ("The passenger damaged my vehicle.", Language.ENGLISH, Intent.SAFETY, "create_safety_incident", True),
+        # Case 2
+        ("When will my payment arrive?", Language.ENGLISH, Intent.PAYOUT, "get_driver_earnings", False),
+        # Case 3
+        ("Payment abhi tak nahi aayi hai.", Language.HINGLISH, Intent.PAYOUT, "get_driver_earnings", False),
+        # Case 4
+        ("Mera passenger mujhe nahi mil raha.", Language.HINGLISH, Intent.CUSTOMER_NOT_FOUND, "get_active_ride", False),
+        # Case 5
+        ("Mera driver verification pending hai.", Language.HINGLISH, Intent.DOCUMENT_STATUS, "get_document_status", False),
+        # Case 6
+        ("Passenger ne ride cancel kar di, mujhe cancellation fee milegi?", Language.HINGLISH, Intent.CUSTOMER_CANCELLED, "get_active_ride", False),
+        # Case 7
+        ("Mera incentive abhi tak nahi mila.", Language.HINGLISH, Intent.INCENTIVE, "get_driver_earnings", False),
+        # Case 8
+        ("Mujhe driver support agent se baat karni hai.", Language.HINGLISH, Intent.HUMAN_AGENT, "handoff_to_agent", True),
+        # Case 9
+        ("Passenger mujhe threaten kar raha hai.", Language.HINGLISH, Intent.SAFETY, "create_safety_incident", True),
+        # Case 10
+        ("I don't feel safe with this passenger.", Language.ENGLISH, Intent.SAFETY, "create_safety_incident", True),
+    ])
+    async def test_all_10_problematic_cases_and_baseline(
+        self, mock_db_driver, mock_redis_driver, query, expected_lang, expected_intent, expected_action, expected_handoff
+    ):
+        orchestrator = ChatOrchestrator(mock_db_driver, mock_redis_driver)
+        session_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+
+        mock_session = MagicMock()
+        mock_session.id = session_id
+        mock_session.user_id = user_id
+        mock_session.language = expected_lang.value
+        orchestrator.conversations.get_session = AsyncMock(return_value=mock_session)
+
+        res = await orchestrator.handle_message(
+            request_id=f"req_{expected_intent.value}",
+            session_id=session_id,
+            user_id=user_id,
+            role=UserRole.DRIVER,
+            text=query
+        )
+
+        assert res.language == expected_lang, f"Language mismatch for '{query}': expected {expected_lang}, got {res.language}"
+        assert res.intent == expected_intent, f"Intent mismatch for '{query}': expected {expected_intent}, got {res.intent}"
+        assert expected_action in res.actions, f"Action {expected_action} not found in actions {res.actions} for '{query}'"
+        assert res.handoff.triggered == expected_handoff, f"Handoff mismatch for '{query}': expected {expected_handoff}, got {res.handoff.triggered}"
+        assert res.intent != Intent.UNKNOWN, f"Intent fell back to UNKNOWN for '{query}'"
+
+

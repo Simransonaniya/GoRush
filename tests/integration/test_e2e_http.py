@@ -317,3 +317,64 @@ async def test_e2e_http_p0_hinglish_accident():
         assert handoff.get("priority") == "P0"
 
 
+@pytest.mark.asyncio
+async def test_e2e_http_guided_refund_flow():
+    """Verify multi-turn refund flow via POST /v1/chat/messages endpoint:
+    Turn 1: 'Meri last ride ka refund chahiye.' -> Verifies ride/payment/refund -> Guides user and asks for confirmation
+    Turn 2: 'Haan kar do' -> Executes request_refund -> Confirms submission with real backend refund ID.
+    """
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    customer_id = uuid.uuid4()
+    session_id = uuid.uuid4()
+
+    async with AsyncSessionLocal() as db:
+        user = User(
+            id=customer_id,
+            external_ref=f"cust_{customer_id}@gorush.com",
+            role=UserRole.CUSTOMER.value,
+            hashed_password=hash_password("password123"),
+            preferred_language="hi-en",
+            is_active=True,
+        )
+        db.add(user)
+        await db.commit()
+
+        from app.chat.models import ChatSession
+        chat_sess = ChatSession(id=session_id, user_id=customer_id, language="hi-en", status="active")
+        db.add(chat_sess)
+        await db.commit()
+
+    token = create_access_token(subject=str(customer_id), role=UserRole.CUSTOMER.value)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        # TURN 1
+        resp1 = await client.post(
+            "/v1/chat/messages",
+            json={"session_id": str(session_id), "message": "Meri last ride ka refund chahiye."},
+            headers=headers,
+        )
+        assert resp1.status_code == 200, resp1.text
+        data1 = resp1.json().get("data", {})
+        assert data1.get("intent") == "refund"
+        assert "get_active_ride" in data1.get("actions", [])
+        assert "get_payment_status" in data1.get("actions", [])
+        assert "get_refund_status" in data1.get("actions", [])
+        assert "eligible" in data1.get("message", "").lower() or "submit" in data1.get("message", "").lower()
+
+        # TURN 2
+        resp2 = await client.post(
+            "/v1/chat/messages",
+            json={"session_id": str(session_id), "message": "Haan kar do"},
+            headers=headers,
+        )
+        assert resp2.status_code == 200, resp2.text
+        data2 = resp2.json().get("data", {})
+        assert data2.get("intent") == "refund"
+        assert "request_refund" in data2.get("actions", [])
+        assert "successfully submit" in data2.get("message", "") or "ref_ride_123" in data2.get("message", "")
+
+
+

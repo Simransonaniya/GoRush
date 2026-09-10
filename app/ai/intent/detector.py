@@ -20,10 +20,11 @@ IMMEDIATE_EMERGENCY_OVERRIDE = re.compile(
 ACTIVE_SAFETY_PATTERN = re.compile(
     r"(accident|i crashed|car crash|vehicle crash|crashed into|crashed my|crashed the|had a crash|collision|hit|durghatna|hadsa|akastmat|apghat"
     r"|एक्सीडेंट|दुर्घटना|हादसा|अपघात|અકસ્માત|দুর্ঘটনা|حادثہ|விபத்து|అపాయం|ಅಪಘಾತ|അപകടം"
-    r"|emergency|sos|danger|dangerous|unsafe|khatra|khatre|in danger"
+    r"|emergency|sos|danger|dangerous|unsafe|khatra|khatre|in danger|feel unsafe|don'?t feel safe|safe feel|safe feel nahi|सुरक्षित महसूस नहीं"
+    r"|damaged my vehicle|damage.*vehicle|damage.*car|car damage"
     r"|आपातकाल|आपत्कालीन|खतरा|खतरे|जोखम|धोका|বিপদ|അപകടം|అత్యవసరం|ತುರ್ತು"
-    r"|threat|threatened|threaten|dhamki|attack|attacked|assault|assaulted|harass|harassed|hamla"
-    r"|धमकी|हमला|हल्ला|হুমকি|হামলা|బెదిరింపు|ದಾಳಿ|ഭീഷണി"
+    r"|threat|threatened|threaten|dhamki|attack|attacked|assault|assaulted|harass|harassed|hamla|behaving badly|badly behave|bad behavior|misbehave"
+    r"|धमकी|हमला|हल्ला|হুমকি|হামলা|బెదిరింపు|ದಾಳಿ|ഭീഷണി|बुरा व्यवहार"
     r"|police|ambulance|help emergency|help accident|immediate help|turant madad|turant sahayata|abhi help|save me|bachao"
     r"|मदद|सहायता|पुलिस|एंबुलेंस|बचाओ|ਮਦਦ|ਸਹਾਇਤਾ|ਮਦਦ|પોલીਸ|మదత్|உதவி|ಸಹಾಯ|സഹായം"
     r"|सहायता चाहिए|मदद चाहिए|help chahiye)",
@@ -36,14 +37,15 @@ SAFETY_KEYWORDS = ACTIVE_SAFETY_PATTERN
 
 INTENT_KEYWORD_MAP: list[tuple[Intent, re.Pattern]] = [
     # Driver specific intents
-    (Intent.CUSTOMER_CANCELLED, re.compile(r"customer cancel|rider cancel|customer ne cancel|rider ne cancel|customer cancelled|rider.*trip cancel|customer.*trip cancel", re.I)),
-    (Intent.CUSTOMER_NOT_FOUND, re.compile(r"customer (is )?not (at|found|here)|rider missing|customer nahi mila|customer nahi hai|rider location pe nahi|customer unreachable|customer not picking", re.I)),
+    (Intent.CUSTOMER_CANCELLED, re.compile(r"customer cancel|rider cancel|customer ne cancel|rider ne cancel|customer cancelled|rider.*trip cancel|customer.*trip cancel|passenger.*cancel|cancellation fee.*(milegi|driver|milna)", re.I)),
+    (Intent.CUSTOMER_NOT_FOUND, re.compile(r"customer (is )?not (at|found|here)|rider missing|customer nahi mila|customer nahi hai|rider location pe nahi|customer unreachable|customer not picking|passenger missing|passenger nahi mil|nahi mil raha|cannot find.*passenger", re.I)),
     (Intent.ACCEPTANCE, re.compile(r"accept.*(ride|booking|duty|rule|rules|policy)|ride accept|booking accept|duty accept|cannot accept|accept issue", re.I)),
     (Intent.RIDE_OFFER, re.compile(r"ride offer|booking offer|offer nahi aa|ride offer nahi|booking nahi mil", re.I)),
-    (Intent.PAYOUT, re.compile(r"payout|withdraw|bank transfer|payout delay|paise kab aayenge|payout issue|bank payout", re.I)),
+    (Intent.PAYOUT, re.compile(r"payout|withdraw|bank transfer|payout delay|paise kab aayenge|payout issue|bank payout|payment.*(arrive|aayeg|aayi|delay|status)|payment kab aayegi|payment abhi tak nahi", re.I)),
     (Intent.INCENTIVE, re.compile(r"incentive|bonus|target bonus|trip bonus|peak hour bonus|incentive status|bonus kab milega", re.I)),
     (Intent.DOCUMENT_STATUS, re.compile(
         r"document.*(status|approve|reject|expir|require|needed|list|rule|verification|verify|verified)|(license|rc|insurance).*(expir|status|approve|require|needed)"
+        r"|driver verification|verification pending|verification status"
         r"|kagaz|document verification|what documents|driver document|onboarding document|दस्तावेज़|દસ્તાવેજ|নথি",
         re.I,
     )),
@@ -70,18 +72,18 @@ INTENT_KEYWORD_MAP: list[tuple[Intent, re.Pattern]] = [
     )),
     # Customer / Driver overlapping intents
     (Intent.DRIVER_CANCELLED, re.compile(r"driver.*(cancel|cancelled)|driver ne cancel", re.I)),
-    (Intent.DRIVER_LATE, re.compile(r"driver.*(late|not come|nahi aa raha|aayega|come|arrive|kab aayega|delay)|what is my eta|driver eta|my eta|get eta|\beta\b", re.I)),
+    (Intent.DRIVER_LATE, re.compile(r"driver.*(late|not come|nahi aa raha|nahi aaya|aayega|come|arrive|kab aayega|delay)|ड्राइवर.*(नहीं आया|लेट|देर|कब आएगा)|ride.*(late|delay|kab tak|kab aayeg|kab aaig)|meri ride late|ride late|what is my eta|driver eta|my eta|get eta|\beta\b", re.I)),
     (Intent.DRIVER_NOT_MOVING, re.compile(
         r"driver.*(not moving|stuck|stopped|ruk gaya|khada hai|move nahi|nahi chal raha)"
         r"|driver is not moving|driver hasn'?t moved",
         re.I,
     )),
     (Intent.NO_DRIVER, re.compile(r"no driver|driver nahi mil|koi driver nahi", re.I)),
-    (Intent.RIDE_STATUS, re.compile(r"(where|when|kaha|kahan|location|eta|कहाँ|कहा|कहान|ક્યાં|કોথায়|ਕਿੱਥੇ|कुठे).*(driver|ride|राइड|રાઇડ|রাইড|ਰਾਈਡ)|ride status|active ride|active.*ride|एक्टिव राइड|એક્ટિવ રાઇડ|সক্রিয় রাইড|ਸਰਗਰਮ ਰਾਈਡ", re.I)),
-    (Intent.FARE, re.compile(r"fare|price|kitna paisa|charge|how much.*fare|fare breakdown|calculated|why.*fare|fare calculation|fare policy|किराया", re.I)),
-    (Intent.PAYMENT_FAILED, re.compile(r"payment fail|paise nahi kate|payment issue|payment status|what is my payment status|check payment status|payment policy|payment method", re.I)),
+    (Intent.RIDE_STATUS, re.compile(r"(where|when|kaha|kahan|location|eta|कहाँ|कहा|कहान|ક્યાં|કોথায়|ਕਿੱਥੇ|कुठे).*(driver|ride|राइड|રાઇડ|রাইড|ਰਾਈਡ)|ride status|active ride|active.*ride|एक्टिव राइड|એક્ટિવ રાઇડ|সক্রিয় রাইড|সক্রিয় রাইড|রাইড.*কোথায়|ਸਰਗਰਮ ਰਾਈਡ", re.I)),
+    (Intent.FARE, re.compile(r"fare|price|kitna paisa|charge|how much.*fare|fare breakdown|calculated|why.*fare|fare calculation|fare policy|किराया|ज्यादा पैसे|अधिक पैसे|extra paise|paise cut|paise kyu cut|jyada paise|zyada paise", re.I)),
+    (Intent.PAYMENT_FAILED, re.compile(r"payment fail|paise nahi kate|payment issue|payment status|what is my payment status|check payment status|payment policy|payment method|paise.*issue", re.I)),
     (Intent.REFUND, re.compile(
-        r"refund|paisa wapas|refund policy|refund process|how.*refund|refund rules"
+        r"refund|paisa wapas|रिफंड|पैसे वापस|refund policy|refund process|how.*refund|refund rules"
         r"|பணம்\s*திரும்ப|திரும்பப்\s*பெற|பணத்தைத்\s*திரும்ப"
         r"|రీఫండ్|డబ్బు\s*తిరిగి"
         r"|ಹಣ\s*ಮರಳಿ|ರಿಫಂಡ್"
@@ -113,8 +115,8 @@ INTENT_KEYWORD_MAP: list[tuple[Intent, re.Pattern]] = [
         re.I,
     )),
     (Intent.FAQ, re.compile(r"faq|help center|support sla|support time|how long.*support|response time|general query|help info|\bsla\b", re.I)),
-    (Intent.HUMAN_AGENT, re.compile(r"human agent|talk to (a )?person|real agent|connect.*agent|agent connect|support agent|customer care|speak to agent", re.I)),
-    (Intent.EARNINGS, re.compile(r"earning|earn|kamai|daily earning|weekly earning|monthly earning|kitna kamaya|today'?s earning|haftewari kamai|aaj ki kamai|how much did i earn", re.I)),
+    (Intent.HUMAN_AGENT, re.compile(r"human agent|talk to (a )?person|real agent|connect.*agent|agent connect|agent.*connect|connect.*support|support agent|customer care|speak to agent|driver support|support se baat|agent se baat|human support|customer support|need.*support|सपोर्ट से बात|सपोर्ट एजेंट", re.I)),
+    (Intent.EARNINGS, re.compile(r"\bearnings?\b|kamai|daily earning|weekly earning|monthly earning|kitna kamaya|today'?s earning|haftewari kamai|aaj ki kamai|how much did i earn", re.I)),
 ]
 
 
@@ -139,7 +141,7 @@ class IntentDetector:
         ]
         return any(p in text_lower for p in policy_phrases) and not any(p in text_lower for p in exclude_personal)
 
-    def detect(self, text: str) -> IntentResult:
+    def detect(self, text: str, role: object = None) -> IntentResult:
         language = language_detector.detect(text)
 
         # 1. Distinguish safety policy / procedure / past non-active inquiries (P3) from active emergencies (P0)

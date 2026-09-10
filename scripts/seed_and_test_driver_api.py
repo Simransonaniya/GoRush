@@ -15,14 +15,28 @@ DRIVER_EMAIL = "driver_demo@gorush.com"
 DRIVER_PASS = "password123"
 
 DRIVER_TEST_QUERIES = [
-    "I am not receiving any ride offers",
-    "Booking offer nahi aa raha hai",
-    "ग्राहक ने भुगतान नहीं किया।",
-    "Cannot accept ride request",
-    "Customer is not at the pickup location",
-    "Customer cancelled the ride halfway",
-    "Show my daily earnings for today",
-    "Emergency SOS accident on the road",
+    # Working baseline
+    "Aaj meri total earning kitni hai?",
+    # Problematic Case 1: Passenger damaged vehicle
+    "The passenger damaged my vehicle.",
+    # Problematic Case 2: Payment arrival inquiry (EN)
+    "When will my payment arrive?",
+    # Problematic Case 3: Payment not received (Hinglish)
+    "Payment abhi tak nahi aayi hai.",
+    # Problematic Case 4: Passenger not found
+    "Mera passenger mujhe nahi mil raha.",
+    # Problematic Case 5: Driver verification pending
+    "Mera driver verification pending hai.",
+    # Problematic Case 6: Cancellation fee eligibility
+    "Passenger ne ride cancel kar di, mujhe cancellation fee milegi?",
+    # Problematic Case 7: Driver incentive delay
+    "Mera incentive abhi tak nahi mila.",
+    # Problematic Case 8: Human agent handoff
+    "Mujhe driver support agent se baat karni hai.",
+    # Problematic Case 9: Passenger threat
+    "Passenger mujhe threaten kar raha hai.",
+    # Problematic Case 10: Feeling unsafe with passenger
+    "I don't feel safe with this passenger.",
 ]
 
 

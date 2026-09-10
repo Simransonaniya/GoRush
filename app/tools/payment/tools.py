@@ -1,8 +1,9 @@
 from typing import Any
 
 from app.common.enums.chat import RiskLevel, UserRole
+from app.common.exceptions.base import ForbiddenError
 from app.tools.registry.tool_spec import BaseTool, ToolContext, ToolDefinition
-from app.tools.ride.gorush_clients import GoRushPaymentClient
+from app.tools.ride.gorush_clients import GoRushPaymentClient, GoRushRideClient
 
 
 class GetPaymentStatusTool(BaseTool):
@@ -17,11 +18,16 @@ class GetPaymentStatusTool(BaseTool):
         risk_level=RiskLevel.LOW,
     )
 
-    def __init__(self, client: GoRushPaymentClient):
+    def __init__(self, client: GoRushPaymentClient, ride_client: GoRushRideClient | None = None):
         self.client = client
+        self.ride_client = ride_client
 
     async def authorize_ownership(self, ctx: ToolContext, arguments: dict[str, Any]) -> None:
-        return  # ownership enforced upstream by GoRush payment service using ctx.user_id
+        ride_id = arguments.get("ride_id")
+        if ride_id and self.ride_client:
+            ride = await self.ride_client.get_active_ride(ctx.user_id)
+            if not ride or ride.get("ride_id") != ride_id:
+                raise ForbiddenError("Ride does not belong to the requesting user")
 
     async def execute(self, ctx: ToolContext, arguments: dict[str, Any]) -> dict[str, Any]:
         ride_id = arguments.get("ride_id", "ride_123")
@@ -40,11 +46,16 @@ class GetRefundStatusTool(BaseTool):
         risk_level=RiskLevel.LOW,
     )
 
-    def __init__(self, client: GoRushPaymentClient):
+    def __init__(self, client: GoRushPaymentClient, ride_client: GoRushRideClient | None = None):
         self.client = client
+        self.ride_client = ride_client
 
     async def authorize_ownership(self, ctx: ToolContext, arguments: dict[str, Any]) -> None:
-        return
+        ride_id = arguments.get("ride_id")
+        if ride_id and self.ride_client:
+            ride = await self.ride_client.get_active_ride(ctx.user_id)
+            if not ride or ride.get("ride_id") != ride_id:
+                raise ForbiddenError("Ride does not belong to the requesting user")
 
     async def execute(self, ctx: ToolContext, arguments: dict[str, Any]) -> dict[str, Any]:
         ride_id = arguments.get("ride_id", "ride_123")
@@ -70,15 +81,23 @@ class RequestRefundTool(BaseTool):
         requires_idempotency_key=True,
     )
 
-    def __init__(self, client: GoRushPaymentClient):
+    def __init__(self, client: GoRushPaymentClient, ride_client: GoRushRideClient | None = None):
         self.client = client
+        self.ride_client = ride_client
 
     async def authorize_ownership(self, ctx: ToolContext, arguments: dict[str, Any]) -> None:
-        return
+        ride_id = arguments.get("ride_id")
+        if ride_id and self.ride_client:
+            ride = await self.ride_client.get_active_ride(ctx.user_id)
+            if not ride or ride.get("ride_id") != ride_id:
+                raise ForbiddenError("Ride does not belong to the requesting user")
 
     async def execute(self, ctx: ToolContext, arguments: dict[str, Any]) -> dict[str, Any]:
+        ride_id = arguments.get("ride_id", "ride_123")
+        reason = arguments.get("reason", "Refund requested by customer")
+        amount = arguments.get("amount")
         return await self.client.request_refund(
-            arguments["ride_id"],
-            arguments["reason"],
-            arguments.get("amount"),
+            ride_id=ride_id,
+            reason=reason,
+            amount=amount,
         )

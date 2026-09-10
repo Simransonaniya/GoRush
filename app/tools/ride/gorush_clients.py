@@ -97,8 +97,14 @@ class MockGoRushRideClient(GoRushRideClient):
     def __init__(self):
         import copy
         self._rides = copy.deepcopy(self._DEFAULT_RIDES)
+        self._user_rides: dict[str, dict[str, Any] | None] = {}
+
+    def set_active_ride(self, user_id: str, ride: dict[str, Any] | None) -> None:
+        self._user_rides[user_id] = ride
 
     async def get_active_ride(self, user_id: str) -> dict[str, Any] | None:
+        if user_id in self._user_rides:
+            return self._user_rides[user_id]
         return self._rides.get("ride_123")
 
     async def get_driver_eta(self, ride_id: str) -> dict[str, Any]:
@@ -131,19 +137,36 @@ class MockGoRushRideClient(GoRushRideClient):
 
 
 class MockGoRushPaymentClient(GoRushPaymentClient):
+    def __init__(self):
+        self._payments: dict[str, dict[str, Any]] = {}
+        self._refunds: dict[str, dict[str, Any]] = {}
+
+    def set_payment_status(self, ride_id: str, status: str, amount: float = 148.0) -> None:
+        self._payments[ride_id] = {"ride_id": ride_id, "status": status, "amount": amount}
+
+    def set_refund_status(self, ride_id: str, status: str, refund_id: str | None = None) -> None:
+        self._refunds[ride_id] = {
+            "ride_id": ride_id,
+            "status": status,
+            "refund_id": refund_id or f"ref_{ride_id}",
+        }
+
     async def get_payment_status(self, ride_id: str) -> dict[str, Any]:
-        return {"ride_id": ride_id, "status": "captured", "amount": 148.0}
+        return self._payments.get(ride_id, {"ride_id": ride_id, "status": "captured", "amount": 148.0})
 
     async def get_refund_status(self, ride_id: str) -> dict[str, Any]:
-        return {"ride_id": ride_id, "status": "not_requested"}
+        return self._refunds.get(ride_id, {"ride_id": ride_id, "status": "not_requested"})
 
     async def request_refund(self, ride_id: str, reason: str, amount: float | None = None) -> dict[str, Any]:
-        return {
+        refund_record = {
             "ride_id": ride_id,
+            "refund_id": f"ref_{ride_id}",
             "status": "refund_initiated",
             "reason": reason,
-            "amount": amount,
+            "amount": amount or 148.0,
         }
+        self._refunds[ride_id] = refund_record
+        return refund_record
 
 
 class MockGoRushSupportClient(GoRushSupportClient):

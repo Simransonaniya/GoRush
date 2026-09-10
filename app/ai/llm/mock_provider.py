@@ -105,7 +105,23 @@ class MockLLMProvider(LLMProvider):
                         status = ride.get("status", "active")
                         driver_id = ride.get("driver_id", "drv_9")
                         eta = ride.get("eta_minutes", 6)
-                        if is_bengali:
+                        is_cnf_q = any(w in last_user_msg.lower() for w in ["nahi mil", "not found", "missing", "unreachable", "mil nahi", "nahi mila", "no-show", "pickup spot", "pickup location"]) and not any(w in last_user_msg.lower() for w in ["cancel", "कैंसिल", "fee", "शुल्क"])
+                        is_cancel_fee_q = any(w in last_user_msg.lower() for w in ["cancel", "cancelled", "कैंसिल", "रद्द", "fee", "शुल्क"])
+                        if is_cnf_q:
+                            if is_hindi:
+                                reply = f"एक्टिव राइड {ride_id} सत्यापित है। यदि पैसेंजर पिकअप स्थान पर नहीं मिल रहा है, तो कृपया ऐप से कॉल करें। यदि वे 5 मिनट के प्रतीक्षा समय में नहीं आते हैं, तो आप 'कस्टमर नहीं मिला (No-Show)' चुनकर राइड कैंसिल कर सकते हैं और कैंसिलेशन शुल्क प्राप्त कर सकते हैं।"
+                            elif is_hinglish:
+                                reply = f"Active ride {ride_id} verified hai. Agar passenger pickup spot par nahi mil raha hai, toh kripya app se unhe call karein. Agar wo 5 minute ke wait time mein nahi aate hain, toh aap 'Customer No-Show' select karke ride cancel kar sakte hain aur cancellation fee pa sakte hain."
+                            else:
+                                reply = f"Active ride {ride_id} verified. If the passenger is not at the pickup location, please try calling them via the app. If they do not arrive within the 5-minute waiting window, you can cancel the ride with 'Customer No-Show' to receive the cancellation fee."
+                        elif is_cancel_fee_q:
+                            if is_hindi:
+                                reply = f"राइड {ride_id} का विवरण चेक कर लिया गया है। पैसेंजर द्वारा राइड कैंसिल करने पर गो-रश ड्राइवर कैंसिलेशन शुल्क नीति के अनुसार आपको कैंसिलेशन शुल्क प्राप्त होगा। यह शुल्क आपकी कमाई में क्रेडिट कर दिया जाएगा।"
+                            elif is_hinglish:
+                                reply = f"Ride {ride_id} verified hai. Passenger ke ride cancel karne par driver cancellation policy ke mutabik aapko cancellation fee milegi. Yeh fee aapki earnings mein credit kar di jayegi."
+                            else:
+                                reply = f"Ride {ride_id} verified. In accordance with GoRush driver cancellation policy, when a passenger cancels the ride, you are eligible for the cancellation fee. The fee will be credited to your earnings."
+                        elif is_bengali:
                             reply = f"আপনার সক্রিয় রাইড ({ride_id}) স্ট্যাটাস '{status}'। ড্রাইভার: {driver_id}, ETA: {eta} মিনিট।"
                         elif is_marathi:
                             reply = f"तुमची ॲक्टिव्ह राइड ({ride_id}) स्थितीत '{status}' आहे. ड्रायव्हर: {driver_id}, ETA: {eta} मिनिटे."
@@ -161,11 +177,11 @@ class MockLLMProvider(LLMProvider):
                     except Exception:
                         total, base, dist = 148.0, 60.0, 70.0
                     if is_hindi:
-                        reply = f"आपकी राइड का कुल किराया ₹{total} है (बेस फेयर: ₹{base}, डिस्टेंस फेयर: ₹{dist})।"
+                        reply = f"आपकी राइड का कुल किराया ₹{total} है (बेस फेयर: ₹{base}, डिस्टेंस फेयर: ₹{dist})。"
                     elif is_hinglish:
-                        reply = f"Aapki ride ka total fare ₹{total} hai (base fare: ₹{base}, distance fare: ₹{dist})."
+                        reply = f"Aapki ride ka total fare ₹{total} hai (base fare: ₹{base}, distance fare: ₹{dist})。"
                     else:
-                        reply = f"The total fare for your ride is ₹{total} (Base fare: ₹{base}, Distance fare: ₹{dist})."
+                        reply = f"The total fare for your ride is ₹{total} (Base fare: ₹{base}, Distance fare: ₹{dist})。"
                 elif "get_payment_status" in feedback:
                     try:
                         match = re.search(r"result:\s*(\{.*\})", feedback)
@@ -175,11 +191,11 @@ class MockLLMProvider(LLMProvider):
                     except Exception:
                         status, amount = "captured", 148.0
                     if is_hindi:
-                        reply = f"आपकी पेमेंट की स्थिति '{status}' है। कुल राशि: ₹{amount}।"
+                        reply = f"आपकी पेमेंट की स्थिति '{status}' है। कुल राशि: ₹{amount}。"
                     elif is_hinglish:
-                        reply = f"Aapki payment status '{status}' hai. Amount: ₹{amount}."
+                        reply = f"Aapki payment status '{status}' hai. Amount: ₹{amount}。"
                     else:
-                        reply = f"Your payment status is '{status}' for amount ₹{amount}."
+                        reply = f"Your payment status is '{status}' for amount ₹{amount}。"
                 elif "get_refund_status" in feedback:
                     try:
                         match = re.search(r"result:\s*(\{.*\})", feedback)
@@ -203,7 +219,23 @@ class MockLLMProvider(LLMProvider):
                         period = res_dict.get("period", "today")
                     except Exception:
                         gross, net, trips, period = 742.50, 668.25, 8, "today"
-                    if is_hindi:
+                    is_payout_q = any(w in last_user_msg.lower() for w in ["payout", "payment", "aayeg", "aayi", "aayeng", "paid", "arrive", "milenge", "पेमेंट", "पेआउट", "पैसे कब", "खाते", "पैसे", "मिलेंगे"])
+                    is_incentive_q = any(w in last_user_msg.lower() for w in ["incentive", "bonus", "इंसेंटिव", "बोनस", "ઇન્સેન્ટિવ", "ਬੋਨਸ", "टारगेट"])
+                    if is_incentive_q:
+                        if is_hindi:
+                            reply = f"आपके इस सप्ताह के इंसेंटिव और बोनस की स्थिति: कुल लक्ष्य पूर्ण होने पर इंसेंटिव राशि आपकी साप्ताहिक कमाई (कुल ग्रॉस: ₹{gross}, नेट: ₹{net}) के साथ बैंक ट्रांसफर द्वारा जमा कर दी जाएगी।"
+                        elif is_hinglish:
+                            reply = f"Aapka weekly target incentive verify ho gaya hai. Eligible incentive amount aapki weekly net earnings ₹{net} ke saath payout cycle mein credit kar diya jayega."
+                        else:
+                            reply = f"Your weekly incentive status has been verified. Eligible bonus incentives are processed alongside your weekly net earnings of ₹{net} and will be credited in the upcoming payout cycle."
+                    elif is_payout_q:
+                        if is_hindi:
+                            reply = f"आपकी साप्ताहिक शुद्ध कमाई ₹{net} ({trips} ट्रिप्स) का पेआउट बैंक ट्रांसफर प्रक्रिया में है। साप्ताहिक पेआउट हर मंगलवार/बुधवार को खाते में जमा होता है।"
+                        elif is_hinglish:
+                            reply = f"Aapki weekly net earnings ₹{net} ({trips} trips) ka payout bank transfer process mein hai. Weekly payout har Tuesday/Wednesday ko account mein credit hota hai."
+                        else:
+                            reply = f"Your weekly payout for net earnings of ₹{net} ({trips} trips completed) is scheduled for automatic bank transfer. Weekly payouts are processed every Tuesday/Wednesday."
+                    elif is_hindi:
                         reply = f"आपकी {period} की कमाई: कुल {trips} ट्रिप्स, ग्रॉस: ₹{gross}, नेट कमाई: ₹{net}।"
                     elif is_hinglish:
                         reply = f"Aapki {period} ki earnings: Total {trips} trips, gross: ₹{gross}, net: ₹{net}."
@@ -327,13 +359,12 @@ class MockLLMProvider(LLMProvider):
                 ]
             ) or any(c in asst_content for c in ["?", "kya", "क्या", "શું", "ਕੀ", "কি", "काईं"])
         )
-        is_user_affirming = any(
-            w in msg_lower for w in [
-                "yes", "confirm", "haan", "ha", "ok", "okay", "kar do", "karo", "कर दो", "ਕਰੋ", "કરો", "করুন",
-                "do it", "bilkul", "yes please", "sure", "proceed", "go ahead", "start",
-                "हाँ", "हौ", "होय", "હા", "হ্যাঁ", "ਹਾਂ", "શરૂ કરો", "કરી દો", "শুরু করুন", "ਸ਼ੁਰੂ ਕਰੋ", "करा", "शुरू कर दो", "start kar do"
-            ]
-        )
+        is_user_affirming = bool(re.search(
+            r"\b(yes|confirm|haan|ha|ok|okay|kar do|karo|do it|bilkul|yes please|sure|proceed|go ahead|start)\b"
+            r"|(हाँ|हौ|होय|हा|হ্যাঁ|ਹਾਂ|करा|कर दो|ਕਰੋ|કરો|করুন|શરૂ કરો|કરી દો|শুরু করুন|ਸ਼ੁਰੂ ਕਰੋ|शुरू कर दो|start kar do)",
+            msg_lower,
+        ))
+
 
         # Security & Privacy Guardrails:
         # 1. PII / Contact details requests (customer/driver phone, personal address, government ID)
@@ -386,9 +417,9 @@ class MockLLMProvider(LLMProvider):
         )
         if is_injection_request:
             if is_hindi:
-                reply = "मैं सुरक्षा नियमों, नीतियों या प्राधिकरण नियंत्रणों को बायपास नहीं कर सकता।"
+                reply = "मैं सुरक्षा नियमों, नीतियों या प्राधिकरण नियंत्रणों को बायपास नहीं कर सकता。"
             elif is_hinglish:
-                reply = "Main safety rules, authorization, ya system security controls ko bypass nahi kar sakta."
+                reply = "Main safety rules, authorization, ya system security controls ko bypass nahi kar sakta。"
             else:
                 reply = "I cannot bypass authorization, safety policies, or system security controls."
             return LLMResponse(text=reply, tool_calls=[], model=self.model, input_tokens=10, output_tokens=20)
@@ -402,9 +433,9 @@ class MockLLMProvider(LLMProvider):
         )
         if is_other_user_earnings:
             if is_hindi:
-                reply = "मैं अन्य ड्राइवरों या उपयोगकर्ताओं की कमाई का विवरण प्रदर्शित नहीं कर सकता।"
+                reply = "मैं अन्य ड्राइवरों या उपयोगकर्ताओं की कमाई का विवरण प्रदर्शित नहीं कर सकता。"
             elif is_hinglish:
-                reply = "Main doosre drivers ya users ki earnings details display nahi kar sakta."
+                reply = "Main doosre drivers ya users ki earnings details display nahi kar sakta。"
             else:
                 reply = "I cannot display earnings or personal data of other drivers or users."
             return LLMResponse(text=reply, tool_calls=[], model=self.model, input_tokens=10, output_tokens=20)
@@ -416,11 +447,17 @@ class MockLLMProvider(LLMProvider):
                 "dispute karo", "start kar do", "dispute शुरू", "వివాదం", "বিবাদ", "বিরোধ", "dispute raise"
             ]
         )
+        has_customer_cancelled_action = any(
+            w in msg_lower or w in last_user_msg for w in [
+                "cancellation fee", "cancel fee", "cancellation charges", "passenger cancelled", "customer cancelled",
+                "passenger ne ride cancel", "passenger ne cancel", "customer ne cancel", "rider ne cancel", "ride cancel kar di", "cancel kar di"
+            ]
+        )
         has_cancel_action = any(
             w in msg_lower or w in last_user_msg for w in [
                 "cancel ride", "ride cancel", "cancel my ride", "cancel karo", "cancel kar do", "trip cancel", "cancel it"
             ]
-        )
+        ) and not has_customer_cancelled_action and not any(w in msg_lower for w in ["fee", "charges", "milegi", "milega", "passenger ne", "customer ne"])
         has_refund_action = any(
             w in msg_lower or w in last_user_msg for w in [
                 "request refund", "process refund", "issue refund", "refund kar do", "paisa wapas karo", "refund request"
@@ -441,17 +478,28 @@ class MockLLMProvider(LLMProvider):
         ) or (any(w in msg_lower for w in ["where", "kaha", "kahan", "location", "status", "कहाँ", "कहा", "ક્યાં", "কোথায়", "ਕਿੱਥੇ", "कुठे"]) and any(w in msg_lower or w in last_user_msg for w in ["ride", "driver", "राइड", "રાઇડ", "রাইড", "ਰਾਈਡ"]))
         has_eta_action = any(
             w in msg_lower or w in last_user_msg for w in [
-                "what is my eta", "driver eta", "my eta", "get eta", "when my driver come", "eta"
+                "what is my eta", "driver eta", "ride eta", "my eta", "get eta", "when my driver come", "eta", "driver is late", "my driver is late",
+                "ride is late", "my ride is late", "ride late", "meri ride late", "ride kab tak", "ride kab tak aaigi", "ride kab tak aayegi", "ride kab aayegi", "ride kab aaigi",
+                "ड्राइवर अभी तक नहीं आया", "ड्राइवर लेट", "ड्राइवर नहीं आया", "driver abhi tak nahi aaya", "driver late", "driver kab aayega",
+                "राइड लेट", "राइड कब", "राइड कब आएगी",
+                "ड्रायव्हर अजून आला नाही", "ડ્રાઈવર હજુ સુધી નથી આવ્યો", "ড্রাইভার এখনও আসেনি", "ਡਰਾਈਵਰ ਅਜੇ ਤੱਕ ਨਹੀਂ ਆਇਆ",
+                "டிரைவர் இன்னும் வரவில்லை", "డ్రైవర్ ఇంకా రాలేదు", "ಡ್ರೈವರ್ ಇನ್ನೂ ಬಂದಿಲ್ಲ", "ഡ്രൈവർ ഇതുവരെ എത്തിയില്ല", "ڈرائیور ابھی تک نہیں آیا"
             ]
-        )
+        ) or (any(w in msg_lower for w in ["late", "delay", "kab tak", "kab aayeg", "kab aaig", "कब तक", "कब आएगी", "लेट", "देर"]) and any(w in msg_lower for w in ["ride", "driver", "cab", "taxi", "राइड", "ड्राइवर", "गाड़ी"]) and not any(w in msg_lower for w in ["payment", "payout", "paise", "कमाई", "पेमेंट", "earnings"]))
         has_fare_action = any(
             w in msg_lower or w in last_user_msg for w in [
-                "how much was the fare", "how much is the fare", "fare breakdown", "fare", "price", "kitna paisa", "fare details"
+                "how much was the fare", "how much is the fare", "fare breakdown", "fare", "price", "kitna paisa", "fare details",
+                "overcharge", "overcharged", "charged too much", "charged more", "extra charge", "incorrect fare", "wrong fare",
+                "ज्यादा पैसे", "अधिक पैसे", "ज्यादा किराया", "पैसे कट गए", "पैसे कट", "पैसे ज्यादा", "गलत किराया", "अतिरिक्त किराया",
+                "ज्यादा चार्ज", "मुझसे ज्यादा", "ज्यादा ले लिए", "पैसे काट लिए", "ज्यादा कटे", "किराया ज्यादा", "किराया",
+                "jyada paise", "zyada paise", "extra paise", "paise kat gaye", "paise cut gaye", "galat charge", "jyada charge", "zyada charge",
+                "fare bahut", "payment amount is incorrect", "जास्त पैसे", "पैसे कापले", "વધુ પૈસા", "વધારે પૈસા", "বেশি টাকা", "ਵੱਧ ਪੈਸੇ",
+                "அதிக கட்டணம்", "ఎక్కువ డబ్బులు", "ಹೆಚ್ಚು ಹಣ", "കൂടുതൽ തുക", "زیادہ پیسے"
             ]
         )
         has_payment_status_action = any(
             w in msg_lower or w in last_user_msg for w in [
-                "what is my payment status", "payment status", "check payment status", "payment fail", "payment issue"
+                "what is my payment status", "payment status", "check payment status", "payment fail"
             ]
         )
         has_refund_status_action = any(
@@ -468,17 +516,56 @@ class MockLLMProvider(LLMProvider):
         has_document_status_action = any(
             w in msg_lower or w in last_user_msg for w in [
                 "document status", "kagaz expire", "license status", "rc status", "check document",
-                "my documents", "documents verified", "documents approved", "are my documents"
+                "my documents", "documents verified", "documents approved", "are my documents",
+                "driver verification", "verification pending", "verification status", "verification",
+                "दस्तावेज़", "सत्यापन", "वेरिफिकेशन", "દસ્તાવેજ", "নথি"
             ]
         )
+        has_payout_action = any(
+            w in msg_lower or w in last_user_msg for w in [
+                "payout", "payment kab aayeg", "payment abhi tak nahi", "paise kab aayeng", "paise kab aayega",
+                "payment delay", "bank transfer", "weekly payout", "payout delay", "payout status", "meri payment",
+                "पेमेंट कब", "पेमेंट अभी तक नहीं", "पैसे कब आएंगे", "पेआउट", "खाते में पैसे", "कमाई के पैसे",
+                "પૈસા ક્યારે", "ચુકવણી ક્યારે", "ਪੇਮੈਂਟ ਕਦੋਂ", "ਪੈਸੇ ਕਦੋਂ", "পেমেন্ট কখন", "টাকা কখন"
+            ]
+        )
+        has_customer_not_found_action = any(
+            w in msg_lower or w in last_user_msg for w in [
+                "customer not found", "passenger not found", "rider missing",
+                "passenger nahi mila", "customer nahi mila", "rider nahi mila",
+                "passenger nahi mil raha", "customer nahi mil raha", "rider nahi mil raha",
+                "passenger mujhe nahi", "customer is not at", "unreachable", "not at the pickup",
+                "पैसेंजर नहीं", "कस्टमर नहीं", "सवारी नहीं", "यात्री नहीं", "ਪੈਸੇਂਜਰ ਨਹੀਂ", "প্যাসেঞ্জার"
+            ]
+        ) or (any(w in msg_lower for w in ["passenger", "customer", "rider", "sawari"]) and any(w in msg_lower for w in ["nahi mil", "not found", "missing", "unreachable"]))
         has_ticket_status_action = any(
             w in msg_lower or w in last_user_msg for w in [
                 "ticket status", "check ticket status", "what is my ticket status", "ticket status info"
             ]
         )
+        has_incentive_action = any(
+            w in msg_lower or w in last_user_msg for w in [
+                "incentive", "bonus", "target bonus", "weekly incentive", "incentive nahi mila",
+                "इंसेंटिव", "बोनस", "ઇન્સેન્ટિવ", "ਬੋਨਸ", "இன்சென்டிவ்", "ఇన్సెంటివ్"
+            ]
+        )
         has_handoff_action = any(
             w in msg_lower or w in last_user_msg for w in [
-                "human agent", "talk to person", "real agent", "human support", "speak to human"
+                "human agent", "talk to person", "real agent", "human support", "speak to human", "talk to a human", "speak to a human",
+                "connect me to support", "customer support", "driver support", "talk to customer support", "talk to driver support",
+                "transfer to agent", "live agent",
+                "कस्टमर सपोर्ट", "ड्राइवर सपोर्ट", "सपोर्ट से बात", "एजेंट से बात", "इंसान से बात", "सपोर्ट टीम", "कस्टमर केयर", "अधिकारी से बात",
+                "एजेंट से कनेक्ट", "सपोर्ट से कनेक्ट", "बात करनी है", "सपोर्ट चाहिए",
+                "agent se baat", "insan se baat", "human se baat", "support se connect", "real person", "support se baat",
+                "driver support se baat", "driver support agent",
+                "customer support se baat", "agent se contact", "agent se connect", "agent se connect karo",
+                "ग्राहक सेवा", "કસ્ટમર સપોર્ટ", "কাস্টমার সাপোর্ট", "ਕਸਟਮਰ ਸਪੋਰਟ", "வாடிக்கையாளர் சேவை", "కస్టమర్ సపోర్ట్",
+                "ಗ್ರಾಹಕ ಬೆಂಬಲ", "കസ്‍റ്റമർ സപ്പോർട്ട്", "کسٹمر سپورٹ"
+            ]
+        )
+        has_refund_action = any(
+            w in msg_lower or w in last_user_msg for w in [
+                "request refund", "need refund", "want refund", "refund chahiye", "last ride refund", "refund kar do", "पैसे वापस"
             ]
         )
 
@@ -492,6 +579,27 @@ class MockLLMProvider(LLMProvider):
                 "પોલિસી", "નિયમો", "શું છે", "নীতি", "নিয়ম", "কী"
             ]
         ) and not any(w in msg_lower for w in ["my document", "my documents", "my ride", "my refund", "my payment", "my earnings", "check my", "cancel my", "my account"])
+
+        is_ambiguous_payment = any(
+            w in msg_lower for w in [
+                "paise ka issue", "paise ki problem", "paise ki dikkat", "paise ki samasya",
+                "payment issue", "payment problem", "payment dikkat", "payment samasya",
+                "पैसे की समस्या", "पैसे का इशू", "पैसे की दिक्कत", "पेमेंट समस्या", "पेमेंट दिक्कत", "पेमेंट इशू"
+            ]
+        ) and not any(
+            w in msg_lower for w in [
+                "fail", "kate", "kat gaye", "cut", "extra", "jyada", "zyada", "refund",
+                "वापस", "ज्यादा", "फेल", "breakdown", "overcharge", "status"
+            ]
+        )
+        if is_ambiguous_payment:
+            if is_hindi:
+                reply = "बिल्कुल, मैं सहायता करता हूँ। क्या आपका पेमेंट फेल हुआ है, ज्यादा पैसे कटे हैं, या आपको रिफंड चाहिए?"
+            elif is_hinglish:
+                reply = "Bilkul, main help karta hoon. Kya aapko payment failed hua hai, extra amount charge hua hai, ya refund chahiye?"
+            else:
+                reply = "Certainly, I can help. Did your payment fail, were you charged an extra amount, or do you need a refund?"
+            return LLMResponse(text=reply, tool_calls=[], model=self.model, input_tokens=10, output_tokens=20)
 
         # Route confirmation or explicit action to appropriate tool (only if not a pure policy/FAQ question)
         if has_active_ride_action and not is_kb_policy_query:
@@ -535,6 +643,42 @@ class MockLLMProvider(LLMProvider):
             return LLMResponse(
                 text="",
                 tool_calls=[{"name": "get_refund_status", "input": {"ride_id": "ride_123"}}],
+                model=self.model,
+                input_tokens=10,
+                output_tokens=20,
+            )
+
+        if has_payout_action and not is_kb_policy_query:
+            return LLMResponse(
+                text="",
+                tool_calls=[{"name": "get_driver_earnings", "input": {"period": "week"}}],
+                model=self.model,
+                input_tokens=10,
+                output_tokens=20,
+            )
+
+        if has_customer_not_found_action and not is_kb_policy_query:
+            return LLMResponse(
+                text="",
+                tool_calls=[{"name": "get_active_ride", "input": {}}],
+                model=self.model,
+                input_tokens=10,
+                output_tokens=20,
+            )
+
+        if has_customer_cancelled_action and not is_kb_policy_query:
+            return LLMResponse(
+                text="",
+                tool_calls=[{"name": "get_active_ride", "input": {}}],
+                model=self.model,
+                input_tokens=10,
+                output_tokens=20,
+            )
+
+        if has_incentive_action and not is_kb_policy_query:
+            return LLMResponse(
+                text="",
+                tool_calls=[{"name": "get_driver_earnings", "input": {"period": "week"}}],
                 model=self.model,
                 input_tokens=10,
                 output_tokens=20,

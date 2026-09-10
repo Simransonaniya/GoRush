@@ -67,21 +67,21 @@ def build_default_registry() -> ToolRegistry:
 
     registry = ToolRegistry()
     # --- READ TOOLS (8) ---
-    registry.register(GetActiveRideTool(ride_client))           # 1
-    registry.register(GetDriverEtaTool(ride_client))            # 2
-    registry.register(GetFareBreakdownTool(ride_client))        # 3
-    registry.register(GetPaymentStatusTool(payment_client))     # 4
-    registry.register(GetRefundStatusTool(payment_client))      # 5
-    registry.register(GetTicketStatusTool(support_client))      # 6
-    registry.register(GetDriverEarningsTool(driver_client))     # 7
-    registry.register(GetDocumentStatusTool(driver_client))     # 8
+    registry.register(GetActiveRideTool(ride_client))                         # 1
+    registry.register(GetDriverEtaTool(ride_client))                          # 2
+    registry.register(GetFareBreakdownTool(ride_client))                      # 3
+    registry.register(GetPaymentStatusTool(payment_client, ride_client))      # 4
+    registry.register(GetRefundStatusTool(payment_client, ride_client))       # 5
+    registry.register(GetTicketStatusTool(support_client))                    # 6
+    registry.register(GetDriverEarningsTool(driver_client))                   # 7
+    registry.register(GetDocumentStatusTool(driver_client))                   # 8
     # --- ACTION TOOLS (6) ---
-    registry.register(RequestRefundTool(payment_client))        # 9
-    registry.register(CancelRideTool(ride_client))              # 10
-    registry.register(StartRematchTool(ride_client))            # 11
-    registry.register(CreateSupportTicketTool(support_client))  # 12
-    registry.register(CreateSafetyIncidentTool(safety_client))  # 13
-    registry.register(HandoffToAgentTool(handoff_client))       # 14
+    registry.register(RequestRefundTool(payment_client, ride_client))          # 9
+    registry.register(CancelRideTool(ride_client))                            # 10
+    registry.register(StartRematchTool(ride_client))                          # 11
+    registry.register(CreateSupportTicketTool(support_client))                # 12
+    registry.register(CreateSafetyIncidentTool(safety_client))                # 13
+    registry.register(HandoffToAgentTool(handoff_client))                     # 14
     return registry
 
 

@@ -230,3 +230,169 @@ class TestSafetyAndSecurityBRD:
         ])
         assert "failed" in res.text.lower() or "samasya" in res.text.lower() or "विफलता" in res.text.lower()
         assert "successfully cancelled" not in res.text.lower()
+
+
+class TestDriverBehaviorAndSafetyRegression:
+    """Regression tests for Driver Behavior, Passenger Safety, Fare Disambiguation,
+    and Human Handoff across English, Hindi, Hinglish, and regional languages."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("text,expected_lang", [
+        ("My driver is behaving badly.", Language.ENGLISH),
+        ("I don't feel safe during this ride.", Language.ENGLISH),
+        ("My driver is threatening me.", Language.ENGLISH),
+        ("I had an accident.", Language.ENGLISH),
+        ("मेरा ड्राइवर मेरे साथ बुरा व्यवहार कर रहा है।", Language.HINDI),
+        ("मुझे इस राइड में सुरक्षित महसूस नहीं हो रहा।", Language.HINDI),
+        ("ड्राइवर मुझे धमकी दे रहा है।", Language.HINDI),
+        ("मेरा एक्सीडेंट हो गया है।", Language.HINDI),
+        ("Mera driver mere saath badly behave kar raha hai.", Language.HINGLISH),
+        ("Mujhe is ride mein safe feel nahi ho raha.", Language.HINGLISH),
+        ("Driver mujhe threaten kar raha hai.", Language.HINGLISH),
+    ])
+    async def test_safety_intents_trigger_emergency_escalation(self, text, expected_lang, mock_db, mock_redis):
+        # 1. Intent detector fast-path
+        detection = intent_detector.detect(text)
+        assert detection.intent == Intent.SAFETY, f"Expected Intent.SAFETY for '{text}', got {detection.intent}"
+        assert detection.urgency == Priority.P0_EMERGENCY, f"Expected P0 for '{text}', got {detection.urgency}"
+        assert detection.language == expected_lang, f"Expected lang {expected_lang} for '{text}', got {detection.language}"
+
+        # 2. Orchestrator end-to-end routing
+        orchestrator = ChatOrchestrator(mock_db, mock_redis)
+        session_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+
+        mock_session = MagicMock()
+        mock_session.id = session_id
+        mock_session.user_id = user_id
+        mock_session.language = expected_lang.value
+        orchestrator.conversations.get_session = AsyncMock(return_value=mock_session)
+
+        res = await orchestrator.handle_message(
+            request_id=f"req_safety_{uuid.uuid4().hex[:6]}",
+            session_id=session_id,
+            user_id=user_id,
+            role=UserRole.CUSTOMER,
+            text=text,
+        )
+
+        assert res.intent == Intent.SAFETY
+        assert res.language == expected_lang
+        assert "create_safety_incident" in res.actions
+        assert "get_ride_fare_breakdown" not in res.actions
+        assert res.handoff.triggered is True
+        assert res.handoff.priority == Priority.P0_EMERGENCY
+        # The generic unknown response must NOT be returned
+        assert "I am GoRush Assistant" not in res.message
+        assert "मैं आपकी राइड, पेमेंट, कमाई" not in res.message
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("text,expected_lang", [
+        ("Why was I charged extra for my ride?", Language.ENGLISH),
+        ("मेरी राइड के लिए ज्यादा पैसे क्यों कटे?", Language.HINDI),
+        ("Meri ride ke liye extra paise kyu cut hue?", Language.HINGLISH),
+    ])
+    async def test_normal_fare_queries_do_not_become_safety(self, text, expected_lang, mock_db, mock_redis):
+        detection = intent_detector.detect(text)
+        assert detection.intent == Intent.FARE, f"Expected Intent.FARE for '{text}', got {detection.intent}"
+        assert detection.intent != Intent.SAFETY
+        assert detection.urgency != Priority.P0_EMERGENCY
+        assert detection.language == expected_lang
+
+        orchestrator = ChatOrchestrator(mock_db, mock_redis)
+        session_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+
+        mock_session = MagicMock()
+        mock_session.id = session_id
+        mock_session.user_id = user_id
+        mock_session.language = expected_lang.value
+        orchestrator.conversations.get_session = AsyncMock(return_value=mock_session)
+
+        res = await orchestrator.handle_message(
+            request_id=f"req_fare_{uuid.uuid4().hex[:6]}",
+            session_id=session_id,
+            user_id=user_id,
+            role=UserRole.CUSTOMER,
+            text=text,
+        )
+
+        assert res.intent == Intent.FARE
+        assert "create_safety_incident" not in res.actions
+        assert res.handoff.priority != Priority.P0_EMERGENCY
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("text,expected_lang", [
+        ("I want to talk to a human agent.", Language.ENGLISH),
+        ("I need customer support.", Language.ENGLISH),
+        ("मुझे कस्टमर सपोर्ट से बात करनी है।", Language.HINDI),
+        ("Mujhe human support se baat karni hai.", Language.HINGLISH),
+    ])
+    async def test_human_support_queries_trigger_handoff(self, text, expected_lang, mock_db, mock_redis):
+        detection = intent_detector.detect(text)
+        assert detection.intent == Intent.HUMAN_AGENT, f"Expected HUMAN_AGENT for '{text}', got {detection.intent}"
+        assert detection.intent != Intent.SAFETY
+        assert detection.language == expected_lang
+
+        orchestrator = ChatOrchestrator(mock_db, mock_redis)
+        session_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+
+        mock_session = MagicMock()
+        mock_session.id = session_id
+        mock_session.user_id = user_id
+        mock_session.language = expected_lang.value
+        orchestrator.conversations.get_session = AsyncMock(return_value=mock_session)
+
+        res = await orchestrator.handle_message(
+            request_id=f"req_human_{uuid.uuid4().hex[:6]}",
+            session_id=session_id,
+            user_id=user_id,
+            role=UserRole.CUSTOMER,
+            text=text,
+        )
+
+        assert res.intent == Intent.HUMAN_AGENT
+        assert res.handoff.triggered is True
+        assert res.handoff.priority in (Priority.P2_STANDARD, Priority.P1_CRITICAL)
+
+    @pytest.mark.asyncio
+    async def test_multi_turn_pending_intent_does_not_hijack_safety(self, mock_db, mock_redis):
+        """Verify that a prior turn awaiting confirmation does NOT hijack a subsequent safety turn."""
+        orchestrator = ChatOrchestrator(mock_db, mock_redis)
+        session_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+
+        mock_session = MagicMock()
+        mock_session.id = session_id
+        mock_session.user_id = user_id
+        mock_session.language = "hi"
+        orchestrator.conversations.get_session = AsyncMock(return_value=mock_session)
+
+        # Mock conversation history: prior assistant message had pending_intent="fare" with confirmation requested
+        asst_msg = MagicMock()
+        asst_msg.role = "assistant"
+        asst_msg.content = "क्या आप किराया विवाद दर्ज करना चाहते हैं? (हाँ / नहीं)"
+        asst_msg.intent = "fare"
+        asst_msg.metadata_json = {
+            "requires_confirmation": True,
+            "pending_intent": "fare",
+        }
+        orchestrator.conversations.get_recent_messages = AsyncMock(return_value=[asst_msg])
+
+        # User sends: "My driver is behaving badly."
+        res = await orchestrator.handle_message(
+            request_id="req_multiturn_safety",
+            session_id=session_id,
+            user_id=user_id,
+            role=UserRole.CUSTOMER,
+            text="My driver is behaving badly.",
+        )
+
+        assert res.language == Language.ENGLISH
+        assert res.intent == Intent.SAFETY
+        assert "create_safety_incident" in res.actions
+        assert "get_ride_fare_breakdown" not in res.actions
+        assert res.handoff.triggered is True
+        assert res.handoff.priority == Priority.P0_EMERGENCY
+
